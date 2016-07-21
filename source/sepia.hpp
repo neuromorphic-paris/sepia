@@ -1161,7 +1161,7 @@ namespace sepia {
                 if (jsonFilename != "") {
                     std::ifstream file(jsonFilename);
                     if (!file.good()) {
-                        throw std::runtime_error("The file '" + jsonFilename + "' does not exist or is not readable");
+                        throw UnreadableFile(jsonFilename);
                     }
                     file.seekg(0, std::fstream::end);
                     _jsonData.reserve(std::size_t(file.tellg()));
