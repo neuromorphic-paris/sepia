@@ -590,10 +590,7 @@ namespace sepia {
     /// ObjectParameter is a specialised parameter which contains other parameters.
     class ObjectParameter : public Parameter {
         public:
-            ObjectParameter() :
-                Parameter()
-            {
-            }
+            ObjectParameter() : Parameter() {}
             template <typename StringType, typename ParameterUniquePtrType, typename... Rest>
             ObjectParameter(StringType&& key, ParameterUniquePtrType&& parameter, Rest&&... rest) :
                 ObjectParameter(std::forward<Rest>(rest)...)
@@ -733,7 +730,7 @@ namespace sepia {
                 return _parameterByKey.begin();
             }
 
-            /// begin returns an iterator to the end of the contained parameters map.
+            /// end returns an iterator to the end of the contained parameters map.
             virtual std::unordered_map<std::string, std::unique_ptr<Parameter>>::const_iterator end() const {
                 return _parameterByKey.end();
             }
@@ -861,7 +858,7 @@ namespace sepia {
                 return _parameters.begin();
             }
 
-            /// begin returns an iterator to the end of the contained parameters vector.
+            /// end returns an iterator to the end of the contained parameters vector.
             virtual std::vector<std::unique_ptr<Parameter>>::const_iterator end() const {
                 return _parameters.end();
             }
