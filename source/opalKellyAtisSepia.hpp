@@ -99,10 +99,6 @@ namespace opalKellyAtisSepia {
     /// Log is a simplified sepia::Log constructor to use with the Opal Kelly Atis.
     class Log : public sepia::Log<Compress> {
         public:
-
-            /// siganture is a string identifying the file type.
-            static std::string signature;
-
             Log(Compress compress = Compress()) :
                 sepia::Log<Compress>(std::move(compress))
             {
@@ -113,10 +109,14 @@ namespace opalKellyAtisSepia {
             Log& operator=(Log&&) = default;
             virtual ~Log() {}
             virtual std::string getSignature() const override {
-                return signature;
+                return signature();
+            }
+
+            /// siganture is a string identifying the file type.
+            static std::string signature() {
+                return "opalKellyAtis";
             }
     };
-    std::string Log::signature = "opalKellyAtis";
 
     /// LogObservable is a simplified sepia::LogObservable constructor to use with the Opal Kelly Atis.
     template <typename HandleEvent, typename HandleException>
