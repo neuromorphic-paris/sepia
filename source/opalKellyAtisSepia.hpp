@@ -138,7 +138,7 @@ namespace opalKellyAtisSepia {
                     std::forward<HandleException>(handleException),
                     filename,
                     std::move(expand),
-                    Log::signature,
+                    Log::signature(),
                     4,
                     slowDownToRealTime,
                     std::move(mustRestart)
