@@ -33,7 +33,10 @@ namespace opalKellyAtisSepia {
                     reducedTimestamp -= offsetOverflow * 0x2000;
                     bytes.reserve(4 * (offsetOverflow + 1));
                     for (auto index = static_cast<std::size_t>(0); index < offsetOverflow; ++index) {
-                        bytes.insert(bytes.end(), overflowBytes, overflowBytes + 4);
+                        bytes.push_back(0x55);
+                        bytes.push_back(0x35);
+                        bytes.push_back(0x31);
+                        bytes.push_back(0xf0);
                     }
                     _timestampOffset += offsetOverflow * 0x2000;
                 }
@@ -52,8 +55,6 @@ namespace opalKellyAtisSepia {
             }
 
         protected:
-            static constexpr unsigned char overflowBytes[] = {0x55, 0x35, 0x31, 0xf0};
-
             int64_t _timestampOffset;
     };
 
@@ -100,7 +101,9 @@ namespace opalKellyAtisSepia {
         public:
 
             /// siganture is a string identifying the file type.
-            static std::string signature;
+            static std::string signature() {
+                return "opalKellyAtis";
+            }
 
             Log(Compress compress = Compress()) :
                 sepia::Log<Compress>(std::move(compress))
@@ -112,10 +115,9 @@ namespace opalKellyAtisSepia {
             Log& operator=(Log&&) = default;
             virtual ~Log() {}
             virtual std::string getSignature() const override {
-                return signature;
+                return signature();
             }
     };
-    std::string Log::signature = "opalKellyAtis";
 
     /// LogObservable is a simplified sepia::LogObservable constructor to use with the Opal Kelly Atis.
     template <typename HandleEvent, typename HandleException>
@@ -176,7 +178,7 @@ namespace opalKellyAtisSepia {
     class Camera : public virtual sepia::Camera {
         public:
             /// availableSerials returns a set of ports in which an Opal Kelly ATIS is connected.
-            static const std::unordered_set<std::string> availableSerials() {
+            static std::unordered_set<std::string> availableSerials() {
                 auto opalKellyFrontPanel = OpalKellyLegacy::okCFrontPanel();
                 auto serials = std::unordered_set<std::string>();
                 for (auto deviceIndex = 0; deviceIndex < opalKellyFrontPanel.GetDeviceCount(); ++deviceIndex) {
@@ -186,13 +188,117 @@ namespace opalKellyAtisSepia {
             }
 
             /// defaultParameter returns the default parameter used by the Opal Kelly ATIS.
-            /// Call clone() on this parameter to generate a editable copy.
-            static const sepia::Parameter& defaultParameter() {
-                return *defaultParameterTemplate;
+            static std::unique_ptr<sepia::Parameter> defaultParameter() {
+                return sepia::make_unique<sepia::ObjectParameter>(
+                    "firmware",                    sepia::make_unique<sepia::StringParameter>("/usr/local/share/sepia/atis.1.1.1.bit"),
+                    "exposureMeasurementTrigger",  sepia::make_unique<sepia::EnumParameter>("changeDetection", std::unordered_set<std::string>({
+                        "changeDetection",
+                        "sequential",
+                        "manual",
+                    })),
+                    "columnsSelection",            sepia::ListParameter::makeEmpty(sepia::make_unique<sepia::NumberParameter>(304, 1, 305, true)),
+                    "selectFirstColumn",           sepia::make_unique<sepia::BooleanParameter>(true),
+                    "rowsSelection",               sepia::ListParameter::makeEmpty(sepia::make_unique<sepia::NumberParameter>(240, 1, 241, true)),
+                    "selectFirstRow",              sepia::make_unique<sepia::BooleanParameter>(true),
+                    "selectionIsRegionOfInterest", sepia::make_unique<sepia::BooleanParameter>(false),
+                    "sendFakeEventPeriodically",   sepia::make_unique<sepia::BooleanParameter>(false),
+                    "applySelectionTo",            sepia::make_unique<sepia::EnumParameter>("changeDetection", std::unordered_set<std::string>({
+                        "changeDetection",
+                        "exposureMeasurement",
+                        "changeDetectionAndExposureMeasurement",
+                    })),
+                    "changeDetection",             sepia::make_unique<sepia::ObjectParameter>(
+                        "resetSwitchBulkPotential",     sepia::make_unique<sepia::CharParameter>(207),
+                        "photoreceptorFeedback",        sepia::make_unique<sepia::CharParameter>(243),
+                        "refractoryPeriod",             sepia::make_unique<sepia::CharParameter>(216),
+                        "follower",                     sepia::make_unique<sepia::CharParameter>(239),
+                        "eventSourceAmplifier",         sepia::make_unique<sepia::CharParameter>( 42),
+                        "onEventThreshold",             sepia::make_unique<sepia::CharParameter>( 51),
+                        "offEventThreshold",            sepia::make_unique<sepia::CharParameter>( 39),
+                        "offEventInverter",             sepia::make_unique<sepia::CharParameter>( 61),
+                        "cascodePhotoreceptorFeedback", sepia::make_unique<sepia::CharParameter>(154)
+                    ),
+                    "exposureMeasurement",         sepia::make_unique<sepia::ObjectParameter>(
+                        "comparatorTail",        sepia::make_unique<sepia::CharParameter>( 54),
+                        "comparatorHysteresis",  sepia::make_unique<sepia::CharParameter>( 47),
+                        "comparatorOutputStage", sepia::make_unique<sepia::CharParameter>( 57),
+                        "upperThreshold",        sepia::make_unique<sepia::CharParameter>(243),
+                        "lowerThreshold",        sepia::make_unique<sepia::CharParameter>(235)
+                    ),
+                    "pullup",                      sepia::make_unique<sepia::ObjectParameter>(
+                        "exposureMeasurementAbscissaRequest", sepia::make_unique<sepia::CharParameter>(131),
+                        "exposureMeasurementOrdinateRequest", sepia::make_unique<sepia::CharParameter>(155),
+                        "changeDetectionAbscissaRequest",     sepia::make_unique<sepia::CharParameter>(151),
+                        "changeDetectionOrdinateRequest",     sepia::make_unique<sepia::CharParameter>(117),
+                        "abscissaAcknoledge",                 sepia::make_unique<sepia::CharParameter>(162),
+                        "abscissaEncoder",                    sepia::make_unique<sepia::CharParameter>(162),
+                        "ordinateEncoder",                    sepia::make_unique<sepia::CharParameter>(120)
+                    ),
+                    "control",                     sepia::make_unique<sepia::ObjectParameter>(
+                        "exposureMeasurementTimeout",           sepia::make_unique<sepia::CharParameter>( 49),
+                        "sequentialExposureMeasurementTimeout", sepia::make_unique<sepia::CharParameter>( 45),
+                        "abscissaAcknoledgeTimeout",            sepia::make_unique<sepia::CharParameter>( 56),
+                        "latchCellScanPulldown",                sepia::make_unique<sepia::CharParameter>(134),
+                        "abscissaRequestPulldown",              sepia::make_unique<sepia::CharParameter>( 87)
+                    )
+                );
             }
 
             /// size returns the full sensor size.
-            static const std::pair<std::size_t, std::size_t> size;
+            static std::pair<std::size_t, std::size_t> size() {
+                return std::make_pair(304, 240);
+            }
+
+            /// configuration contains the settings for the digital-to-analog converters on the FPGA.
+            static std::unordered_map<
+                std::string, std::unordered_map<
+                    std::string, std::unordered_map<
+                        std::string, uint32_t>>> configuration() {
+                return std::unordered_map<
+                    std::string, std::unordered_map<
+                        std::string, std::unordered_map<
+                            std::string, uint32_t>>>({
+                    {"changeDetection", {
+                        {"resetSwitchBulkPotential",     {{"address", 0x02}, {"tension", 0x5900}}},
+                        {"photoreceptorFeedback",        {{"address", 0x03}, {"tension", 0x5900}}},
+                        {"refractoryPeriod",             {{"address", 0x04}, {"tension", 0x5900}}},
+                        {"follower",                     {{"address", 0x05}, {"tension", 0x5900}}},
+                        {"eventSourceAmplifier",         {{"address", 0x06}, {"tension", 0x7900}}},
+                        {"onEventThreshold",             {{"address", 0x07}, {"tension", 0x7900}}},
+                        {"offEventThreshold",            {{"address", 0x08}, {"tension", 0x7900}}},
+                        {"offEventInverter",             {{"address", 0x09}, {"tension", 0x7900}}},
+                        {"cascodePhotoreceptorFeedback", {{"address", 0x0a}, {"tension", 0x7900}}},
+                    }},
+                    {"exposureMeasurement", {
+                        {"comparatorTail",        {{"address", 0x0b}, {"tension", 0x7900}}},
+                        {"comparatorHysteresis",  {{"address", 0x0c}, {"tension", 0x7900}}},
+                        {"comparatorOutputStage", {{"address", 0x0d}, {"tension", 0x7900}}},
+                        {"upperThreshold",        {{"address", 0x0e}, {"tension", 0x5900}}},
+                        {"lowerThreshold",        {{"address", 0x0f}, {"tension", 0x5900}}},
+                    }},
+                    {"pullup", {
+                        {"exposureMeasurementAbscissaRequest", {{"address", 0x10}, {"tension", 0x5900}}},
+                        {"exposureMeasurementOrdinateRequest", {{"address", 0x11}, {"tension", 0x5900}}},
+                        {"changeDetectionAbscissaRequest",     {{"address", 0x12}, {"tension", 0x5900}}},
+                        {"changeDetectionOrdinateRequest",     {{"address", 0x13}, {"tension", 0x5900}}},
+                        {"abscissaAcknoledge",                 {{"address", 0x14}, {"tension", 0x5900}}},
+                        {"abscissaEncoder",                    {{"address", 0x15}, {"tension", 0x7900}}},
+                        {"ordinateEncoder",                    {{"address", 0x16}, {"tension", 0x7900}}},
+                    }},
+                    {"control", {
+                        {"exposureMeasurementTimeout",           {{"address", 0x17}, {"tension", 0x7900}}},
+                        {"sequentialExposureMeasurementTimeout", {{"address", 0x18}, {"tension", 0x7900}}},
+                        {"abscissaAcknoledgeTimeout",            {{"address", 0x19}, {"tension", 0x7900}}},
+                        {"latchCellScanPulldown",                {{"address", 0x1a}, {"tension", 0x7900}}},
+                        {"abscissaRequestPulldown",              {{"address", 0x1b}, {"tension", 0x7900}}},
+                    }},
+                    {"static", {
+                        {"resetTimestamp",   {{"address", 0x00}, {"tension", 0x5900}, {"value", 0}}},
+                        {"testEvent",        {{"address", 0x01}, {"tension", 0x7900}, {"value", 0}}},
+                        {"resetPhotodiodes", {{"address", 0x1c}, {"tension",   0x00}, {"value", 3}}},
+                    }},
+                });
+            }
 
             Camera() : sepia::Camera() {}
             Camera(const Camera&) = delete;
@@ -204,114 +310,7 @@ namespace opalKellyAtisSepia {
             /// trigger sends a trigger signal to the camera.
             /// With default settings, this signal will trigger a change detection on every pixel.
             virtual void trigger() = 0;
-
-            /// configuration contains the settings for the digital-to-analog converters on the FPGA.
-            static const std::unordered_map<
-                std::string, std::unordered_map<
-                    std::string, std::unordered_map<
-                        std::string, uint32_t>>> configuration;
-
-            /// defaultParameter contains a unique pointer to the default parameter.
-            static std::unique_ptr<sepia::Parameter> defaultParameterTemplate;
     };
-    const std::pair<std::size_t, std::size_t> Camera::size = std::make_pair(304, 240);
-    const std::unordered_map<
-        std::string, std::unordered_map<
-            std::string, std::unordered_map<
-                std::string, uint32_t>>> Camera::configuration = {
-        {"changeDetection", {
-            {"resetSwitchBulkPotential",     {{"address", 0x02}, {"tension", 0x5900}}},
-            {"photoreceptorFeedback",        {{"address", 0x03}, {"tension", 0x5900}}},
-            {"refractoryPeriod",             {{"address", 0x04}, {"tension", 0x5900}}},
-            {"follower",                     {{"address", 0x05}, {"tension", 0x5900}}},
-            {"eventSourceAmplifier",         {{"address", 0x06}, {"tension", 0x7900}}},
-            {"onEventThreshold",             {{"address", 0x07}, {"tension", 0x7900}}},
-            {"offEventThreshold",            {{"address", 0x08}, {"tension", 0x7900}}},
-            {"offEventInverter",             {{"address", 0x09}, {"tension", 0x7900}}},
-            {"cascodePhotoreceptorFeedback", {{"address", 0x0a}, {"tension", 0x7900}}},
-        }},
-        {"exposureMeasurement", {
-            {"comparatorTail",        {{"address", 0x0b}, {"tension", 0x7900}}},
-            {"comparatorHysteresis",  {{"address", 0x0c}, {"tension", 0x7900}}},
-            {"comparatorOutputStage", {{"address", 0x0d}, {"tension", 0x7900}}},
-            {"upperThreshold",        {{"address", 0x0e}, {"tension", 0x5900}}},
-            {"lowerThreshold",        {{"address", 0x0f}, {"tension", 0x5900}}},
-        }},
-        {"pullup", {
-            {"exposureMeasurementAbscissaRequest", {{"address", 0x10}, {"tension", 0x5900}}},
-            {"exposureMeasurementOrdinateRequest", {{"address", 0x11}, {"tension", 0x5900}}},
-            {"changeDetectionAbscissaRequest",     {{"address", 0x12}, {"tension", 0x5900}}},
-            {"changeDetectionOrdinateRequest",     {{"address", 0x13}, {"tension", 0x5900}}},
-            {"abscissaAcknoledge",                 {{"address", 0x14}, {"tension", 0x5900}}},
-            {"abscissaEncoder",                    {{"address", 0x15}, {"tension", 0x7900}}},
-            {"ordinateEncoder",                    {{"address", 0x16}, {"tension", 0x7900}}},
-        }},
-        {"control", {
-            {"exposureMeasurementTimeout",           {{"address", 0x17}, {"tension", 0x7900}}},
-            {"sequentialExposureMeasurementTimeout", {{"address", 0x18}, {"tension", 0x7900}}},
-            {"abscissaAcknoledgeTimeout",            {{"address", 0x19}, {"tension", 0x7900}}},
-            {"latchCellScanPulldown",                {{"address", 0x1a}, {"tension", 0x7900}}},
-            {"abscissaRequestPulldown",              {{"address", 0x1b}, {"tension", 0x7900}}},
-        }},
-        {"static", {
-            {"resetTimestamp",   {{"address", 0x00}, {"tension", 0x5900}, {"value", 0}}},
-            {"testEvent",        {{"address", 0x01}, {"tension", 0x7900}, {"value", 0}}},
-            {"resetPhotodiodes", {{"address", 0x1c}, {"tension",   0x00}, {"value", 3}}},
-        }},
-    };
-    std::unique_ptr<sepia::Parameter> Camera::defaultParameterTemplate = sepia::make_unique<sepia::ObjectParameter>(
-        "firmware",                    sepia::make_unique<sepia::StringParameter>("/usr/local/share/sepia/atis.1.1.1.bit"),
-        "exposureMeasurementTrigger",  sepia::make_unique<sepia::EnumParameter>("changeDetection", std::unordered_set<std::string>({
-            "changeDetection",
-            "sequential",
-            "manual",
-        })),
-        "columnsSelection",            sepia::ListParameter::makeEmpty(sepia::make_unique<sepia::NumberParameter>(304, 1, 305, true)),
-        "selectFirstColumn",           sepia::make_unique<sepia::BooleanParameter>(true),
-        "rowsSelection",               sepia::ListParameter::makeEmpty(sepia::make_unique<sepia::NumberParameter>(240, 1, 241, true)),
-        "selectFirstRow",              sepia::make_unique<sepia::BooleanParameter>(true),
-        "selectionIsRegionOfInterest", sepia::make_unique<sepia::BooleanParameter>(false),
-        "sendFakeEventPeriodically",   sepia::make_unique<sepia::BooleanParameter>(false),
-        "applySelectionTo",            sepia::make_unique<sepia::EnumParameter>("changeDetection", std::unordered_set<std::string>({
-            "changeDetection",
-            "exposureMeasurement",
-            "changeDetectionAndExposureMeasurement",
-        })),
-        "changeDetection",             sepia::make_unique<sepia::ObjectParameter>(
-            "resetSwitchBulkPotential",     sepia::make_unique<sepia::CharParameter>(207),
-            "photoreceptorFeedback",        sepia::make_unique<sepia::CharParameter>(243),
-            "refractoryPeriod",             sepia::make_unique<sepia::CharParameter>(216),
-            "follower",                     sepia::make_unique<sepia::CharParameter>(239),
-            "eventSourceAmplifier",         sepia::make_unique<sepia::CharParameter>( 42),
-            "onEventThreshold",             sepia::make_unique<sepia::CharParameter>( 51),
-            "offEventThreshold",            sepia::make_unique<sepia::CharParameter>( 39),
-            "offEventInverter",             sepia::make_unique<sepia::CharParameter>( 61),
-            "cascodePhotoreceptorFeedback", sepia::make_unique<sepia::CharParameter>(154)
-        ),
-        "exposureMeasurement",         sepia::make_unique<sepia::ObjectParameter>(
-            "comparatorTail",        sepia::make_unique<sepia::CharParameter>( 54),
-            "comparatorHysteresis",  sepia::make_unique<sepia::CharParameter>( 47),
-            "comparatorOutputStage", sepia::make_unique<sepia::CharParameter>( 57),
-            "upperThreshold",        sepia::make_unique<sepia::CharParameter>(243),
-            "lowerThreshold",        sepia::make_unique<sepia::CharParameter>(235)
-        ),
-        "pullup",                      sepia::make_unique<sepia::ObjectParameter>(
-            "exposureMeasurementAbscissaRequest", sepia::make_unique<sepia::CharParameter>(131),
-            "exposureMeasurementOrdinateRequest", sepia::make_unique<sepia::CharParameter>(155),
-            "changeDetectionAbscissaRequest",     sepia::make_unique<sepia::CharParameter>(151),
-            "changeDetectionOrdinateRequest",     sepia::make_unique<sepia::CharParameter>(117),
-            "abscissaAcknoledge",                 sepia::make_unique<sepia::CharParameter>(162),
-            "abscissaEncoder",                    sepia::make_unique<sepia::CharParameter>(162),
-            "ordinateEncoder",                    sepia::make_unique<sepia::CharParameter>(120)
-        ),
-        "control",                     sepia::make_unique<sepia::ObjectParameter>(
-            "exposureMeasurementTimeout",           sepia::make_unique<sepia::CharParameter>( 49),
-            "sequentialExposureMeasurementTimeout", sepia::make_unique<sepia::CharParameter>( 45),
-            "abscissaAcknoledgeTimeout",            sepia::make_unique<sepia::CharParameter>( 56),
-            "latchCellScanPulldown",                sepia::make_unique<sepia::CharParameter>(134),
-            "abscissaRequestPulldown",              sepia::make_unique<sepia::CharParameter>( 87)
-        )
-    );
 
     /// SpecialisedCamera represents a template-specialised ATIS connected to an Opal Kelly board.
     template <typename HandleEvent, typename HandleException>
@@ -334,7 +333,7 @@ namespace opalKellyAtisSepia {
                     sleepDuration
                 ),
                 _expand(std::move(expand)),
-                _parameter(defaultParameterTemplate->clone()),
+                _parameter(defaultParameter()),
                 _acquisitionRunning(true)
             {
                 if (unvalidatedParameter->isString()) {
@@ -393,7 +392,7 @@ namespace opalKellyAtisSepia {
                 _opalKellyFrontPanel.UpdateWireIns();
 
                 // Initialise the digital-to-analog converters (biases setup)
-                for (auto&& categoryPair : configuration) {
+                for (auto&& categoryPair : configuration()) {
                     for (auto&& settingPair : categoryPair.second) {
                         _opalKellyFrontPanel.SetWireInValue(0x01,
                             categoryPair.first == "static" ?
