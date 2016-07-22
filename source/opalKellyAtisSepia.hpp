@@ -33,7 +33,10 @@ namespace opalKellyAtisSepia {
                     reducedTimestamp -= offsetOverflow * 0x2000;
                     bytes.reserve(4 * (offsetOverflow + 1));
                     for (auto index = static_cast<std::size_t>(0); index < offsetOverflow; ++index) {
-                        bytes.push_back({0x55, 0x35, 0x31, 0xf0});
+                        bytes.push_back(0x55);
+                        bytes.push_back(0x35);
+                        bytes.push_back(0x31);
+                        bytes.push_back(0xf0);
                     }
                     _timestampOffset += offsetOverflow * 0x2000;
                 }
