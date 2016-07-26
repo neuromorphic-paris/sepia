@@ -345,7 +345,7 @@ namespace sepia {
                             }
                         }
                     } catch (...) {
-                        SpecialisedObservable<HandleEvent, HandleException>::_handleException(std::current_exception());
+                        this->_handleException(std::current_exception());
                     }
                 });
             }
