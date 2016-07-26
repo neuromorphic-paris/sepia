@@ -353,7 +353,10 @@ namespace sepia {
             LogObservable(LogObservable&&) = default;
             LogObservable& operator=(const LogObservable&) = delete;
             LogObservable& operator=(LogObservable&&) = default;
-            virtual ~LogObservable() {}
+            virtual ~LogObservable() {
+                _running.store(false, std::memory_order_relaxed);
+                _loop.join();
+            }
 
         protected:
             Expand _initialExpand;
