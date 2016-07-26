@@ -323,7 +323,7 @@ namespace sepia {
                                 }
                                 if (_expand(readBytes, event)) {
                                     std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
-                                    SpecialisedObservable<HandleEvent, HandleException>::_handleEvent(event);
+                                    this->_handleEvent(event);
                                 }
                             }
                         } else {
@@ -340,7 +340,7 @@ namespace sepia {
                                     }
                                 }
                                 if (_expand(readBytes, event)) {
-                                    SpecialisedObservable<HandleEvent, HandleException>::_handleEvent(event);
+                                    this->_handleEvent(event);
                                 }
                             }
                         }
