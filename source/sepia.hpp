@@ -323,7 +323,7 @@ namespace sepia {
                                 }
                                 if (_expand(readBytes, event)) {
                                     std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
-                                    SpecialisedObservable<HandleEvent, HandleException>::_handleEvent(event);
+                                    this->_handleEvent(event);
                                 }
                             }
                         } else {
@@ -340,12 +340,12 @@ namespace sepia {
                                     }
                                 }
                                 if (_expand(readBytes, event)) {
-                                    SpecialisedObservable<HandleEvent, HandleException>::_handleEvent(event);
+                                    this->_handleEvent(event);
                                 }
                             }
                         }
                     } catch (...) {
-                        SpecialisedObservable<HandleEvent, HandleException>::_handleException(std::current_exception());
+                        this->_handleException(std::current_exception());
                     }
                 });
             }
@@ -353,7 +353,10 @@ namespace sepia {
             LogObservable(LogObservable&&) = default;
             LogObservable& operator=(const LogObservable&) = delete;
             LogObservable& operator=(LogObservable&&) = default;
-            virtual ~LogObservable() {}
+            virtual ~LogObservable() {
+                _running.store(false, std::memory_order_relaxed);
+                _loop.join();
+            }
 
         protected:
             Expand _initialExpand;
