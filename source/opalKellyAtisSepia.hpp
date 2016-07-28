@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-/// OpalKellyAtisSepia specialises Sepia for the Opal Kelly ATIS.
+/// opalKellyAtisSepia specialises Sepia for the Opal Kelly ATIS.
 /// In order to use this header, an application must link to the dynamic library opalkellyfrontpanel.
 namespace opalKellyAtisSepia {
 
