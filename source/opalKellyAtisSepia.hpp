@@ -245,12 +245,12 @@ namespace opalKellyAtisSepia {
             }
 
             /// width returns the sensor width.
-            static std::size_t width() {
+            static constexpr std::size_t width() {
                 return 304;
             }
 
             /// height returns the sensor height.
-            static std::size_t height() {
+            static constexpr std::size_t height() {
                 return 240;
             }
 
