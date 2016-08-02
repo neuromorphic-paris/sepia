@@ -244,9 +244,14 @@ namespace opalKellyAtisSepia {
                 );
             }
 
-            /// size returns the full sensor size.
-            static std::pair<std::size_t, std::size_t> size() {
-                return std::make_pair(304, 240);
+            /// width returns the sensor width.
+            static constexpr std::size_t width() {
+                return 304;
+            }
+
+            /// height returns the sensor height.
+            static constexpr std::size_t height() {
+                return 240;
             }
 
             /// configuration contains the settings for the digital-to-analog converters on the FPGA.
