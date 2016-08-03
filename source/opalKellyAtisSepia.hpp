@@ -73,8 +73,8 @@ namespace opalKellyAtisSepia {
 
             /// operator() handles unsigned chars.
             virtual bool operator()(std::vector<unsigned char> bytes, sepia::Event& event) {
-                event.y = static_cast<uint16_t>(bytes[3]);
-                if (event.y < 240) {
+                if (bytes[3] < 240) {
+                    event.y = static_cast<uint16_t>(239 - bytes[3]);
                     event.x = ((static_cast<uint16_t>(bytes[1] & 0x20) << 3) | bytes[2]);
                     if (event.x < 304) {
                         event.timestamp = _timestampOffset + ((static_cast<int64_t>(bytes[1] & 0x1f) << 8) | bytes[0]);
@@ -83,7 +83,7 @@ namespace opalKellyAtisSepia {
                         return true;
                     }
                 } else if (
-                    event.y == 240
+                    bytes[3] == 240
                     && ((static_cast<uint16_t>(bytes[1] & 0x20) << 3) | bytes[2]) == 305
                     && ((static_cast<int64_t>(bytes[1] & 0x1f) << 8) | bytes[0]) == 0x1555
                 ) {
