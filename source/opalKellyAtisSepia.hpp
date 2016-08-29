@@ -40,7 +40,7 @@ namespace opalKellyAtisSepia {
                     }
                     _timestampOffset += offsetOverflow * 0x2000;
                 }
-                btes.push_back(static_cast<unsigned char>(reducedTimestamp & 0xff));
+                bytes.push_back(static_cast<unsigned char>(reducedTimestamp & 0xff));
                 bytes.push_back(static_cast<unsigned char>(
                     ((reducedTimestamp & 0x1f00) >> 8)
                     | (event.isExposureMeasurement ? 0x40 : 0x00)
