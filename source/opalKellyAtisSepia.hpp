@@ -156,7 +156,7 @@ namespace opalKellyAtisSepia {
         HandleEvent handleEvent,
         HandleException handleException,
         std::string filename,
-        bool slowDownToRealTime = false,
+        sepia::LogObservable::Dispatch dispatch = sepia::LogObservable::Dispatch::synchronouslyAndSkipOffset,
         std::function<bool()> mustRestart = []() -> bool {
             return false;
         },
