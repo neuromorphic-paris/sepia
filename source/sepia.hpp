@@ -146,9 +146,9 @@ namespace sepia {
 
             /// operator() handles an event.
             virtual void operator()(Event event) {
-                const auto bytes = _compress(event);
                 while (_accessingLog.test_and_set(std::memory_order_acquire)) {}
                 if (_logging) {
+                    const auto bytes = _compress(event);
                     _log.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
                 }
                 _accessingLog.clear(std::memory_order_release);
@@ -266,18 +266,36 @@ namespace sepia {
     };
 
     /// LogObservable is a log file reader.
+    class LogObservable : public virtual Observable {
+        public:
+
+            /// Dispatch specifies when the events are dispatched.
+            enum class Dispatch {
+                synchronouslyAndSkipOffset;
+                synchronously;
+                asFastAsPossible;
+            };
+
+            LogObservable() : Observable {}
+            LogObservable(const LogObservable&) = delete;
+            LogObservable(LogObservable&&) = default;
+            LogObservable& operator=(const LogObservable&) = delete;
+            LogObservable& operator=(LogObservable&&) = default;
+            virtual ~LogObservable() {}
+    };
+
     /// The events are read as fast as possible.
     template <typename HandleEvent, typename HandleException, typename Expand>
-    class LogObservable : public SpecialisedObservable<HandleEvent, HandleException> {
+    class SpecialisedLogObservable : public virtual LogObservable, public SpecialisedObservable<HandleEvent, HandleException> {
         public:
-            LogObservable(
+            SpecialisedLogObservable(
                 HandleEvent handleEvent,
                 HandleException handleException,
                 std::string filename,
                 Expand expand,
                 std::string signature,
                 std::size_t eventLength,
-                bool slowDownToRealTime = false,
+                LogObservable::Dispatch dispatch = LogObservable::Dispatch::synchronouslyAndSkipOffset,
                 std::function<bool()> mustRestart = []() -> bool {
                     return false;
                 }
@@ -302,58 +320,88 @@ namespace sepia {
                     throw WrongSignature();
                 }
 
-                _loop = std::thread([this, eventLength, slowDownToRealTime, signature]() -> void {
+                _loop = std::thread([this, eventLength, dispatch, signature]() -> void {
                     auto readBytes = std::vector<unsigned char>(eventLength);
                     auto event = Event{};
                     try {
-                        if (slowDownToRealTime) {
-                            auto timeReference = std::chrono::system_clock::now();
-                            while (_running.load(std::memory_order_relaxed)) {
-                                _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
-                                if (_log.eof()) {
-                                    if (_mustRestart()) {
-                                        _log.clear();
-                                        _log.seekg(signature.length(), _log.beg);
-                                        _expand = _initialExpand;
-                                        timeReference = std::chrono::system_clock::now();
-                                        continue;
-                                    } else {
-                                        throw EndOfFile();
+
+                        switch (dispatch) {
+                            case LogObservable::Dispatch::synchronouslyAndSkipOffset:
+                                auto offsetSkipped = false;
+                                auto initialTimestamp = static_cast<int64_t>(0);
+                                auto timeReference = std::chrono::system_clock::now();
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
+                                    if (_log.eof()) {
+                                        if (_mustRestart()) {
+                                            _log.clear();
+                                            _log.seekg(signature.length(), _log.beg);
+                                            _expand = _initialExpand;
+                                            auto offsetSkipped = false;
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        } else {
+                                            throw EndOfFile();
+                                        }
+                                    }
+                                    if (_expand(readBytes, event)) {
+                                        if (offsetSkipped) {
+                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
+                                        } else {
+                                            offsetSkipped = true;
+                                            initialTimestamp = event.timestamp;
+                                        }
+                                        this->_handleEvent(event);
                                     }
                                 }
-                                if (_expand(readBytes, event)) {
-                                    std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
-                                    this->_handleEvent(event);
-                                }
-                            }
-                        } else {
-                            while (_running.load(std::memory_order_relaxed)) {
-                                _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
-                                if (_log.eof()) {
-                                    if (_mustRestart()) {
-                                        _log.clear();
-                                        _log.seekg(signature.length(), _log.beg);
-                                        _expand = _initialExpand;
-                                        continue;
-                                    } else {
-                                        throw EndOfFile();
+                            case LogObservable::Dispatch::synchronously:
+                                auto timeReference = std::chrono::system_clock::now();
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
+                                    if (_log.eof()) {
+                                        if (_mustRestart()) {
+                                            _log.clear();
+                                            _log.seekg(signature.length(), _log.beg);
+                                            _expand = _initialExpand;
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        } else {
+                                            throw EndOfFile();
+                                        }
+                                    }
+                                    if (_expand(readBytes, event)) {
+                                        std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
+                                        this->_handleEvent(event);
                                     }
                                 }
-                                if (_expand(readBytes, event)) {
-                                    this->_handleEvent(event);
+                            case LogObservable::Dispatch::asFastAsPossible:
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
+                                    if (_log.eof()) {
+                                        if (_mustRestart()) {
+                                            _log.clear();
+                                            _log.seekg(signature.length(), _log.beg);
+                                            _expand = _initialExpand;
+                                            continue;
+                                        } else {
+                                            throw EndOfFile();
+                                        }
+                                    }
+                                    if (_expand(readBytes, event)) {
+                                        this->_handleEvent(event);
+                                    }
                                 }
-                            }
                         }
                     } catch (...) {
                         this->_handleException(std::current_exception());
                     }
                 });
             }
-            LogObservable(const LogObservable&) = delete;
-            LogObservable(LogObservable&&) = default;
-            LogObservable& operator=(const LogObservable&) = delete;
-            LogObservable& operator=(LogObservable&&) = default;
-            virtual ~LogObservable() {
+            SpecialisedLogObservable(const SpecialisedLogObservable&) = delete;
+            SpecialisedLogObservable(SpecialisedLogObservable&&) = default;
+            SpecialisedLogObservable& operator=(const SpecialisedLogObservable&) = delete;
+            SpecialisedLogObservable& operator=(SpecialisedLogObservable&&) = default;
+            virtual ~SpecialisedLogObservable() {
                 _running.store(false, std::memory_order_relaxed);
                 _loop.join();
             }
