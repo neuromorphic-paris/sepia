@@ -40,17 +40,15 @@ namespace opalKellyAtisSepia {
                     }
                     _timestampOffset += offsetOverflow * 0x2000;
                 }
-                bytes.insert(bytes.end(), {
-                    static_cast<unsigned char>(reducedTimestamp & 0xff),
-                    static_cast<unsigned char>(
-                        ((reducedTimestamp & 0x1f00) >> 8)
-                        | (event.isExposureMeasurement ? 0x40 : 0x00)
-                        | (event.polarity ? 0x80 : 0x00)
-                        | ((event.x & 0x100) >> 3)
-                    ),
-                    static_cast<unsigned char>(event.x & 0xff),
-                    static_cast<unsigned char>(event.y),
-                });
+                bytes.push_back(static_cast<unsigned char>(reducedTimestamp & 0xff));
+                bytes.push_back(static_cast<unsigned char>(
+                    ((reducedTimestamp & 0x1f00) >> 8)
+                    | (event.isExposureMeasurement ? 0x40 : 0x00)
+                    | (event.polarity ? 0x80 : 0x00)
+                    | ((event.x & 0x100) >> 3)
+                ));
+                bytes.push_back(static_cast<unsigned char>(event.x & 0xff));
+                bytes.push_back(static_cast<unsigned char>(event.y));
                 return bytes;
             }
 
@@ -119,15 +117,15 @@ namespace opalKellyAtisSepia {
             }
     };
 
-    /// LogObservable is a simplified sepia::LogObservable constructor to use with the Opal Kelly Atis.
+    /// SpecialisedLogObservable is a simplified sepia::SpecialisedLogObservable constructor to use with the Opal Kelly Atis.
     template <typename HandleEvent, typename HandleException>
-    class LogObservable : public sepia::LogObservable<HandleEvent, HandleException, Expand> {
+    class SpecialisedLogObservable : public sepia::SpecialisedLogObservable<HandleEvent, HandleException, Expand> {
         public:
-            LogObservable(
+            SpecialisedLogObservable(
                 HandleEvent handleEvent,
                 HandleException handleException,
                 std::string filename,
-                bool slowDownToRealTime = false,
+                sepia::LogObservable::Dispatch dispatch = sepia::LogObservable::Dispatch::synchronouslyAndSkipOffset,
                 std::function<bool()> mustRestart = []() -> bool {
                     return false;
                 },
@@ -145,16 +143,16 @@ namespace opalKellyAtisSepia {
                 )
             {
             }
-            LogObservable(const LogObservable&) = delete;
-            LogObservable(LogObservable&&) = default;
-            LogObservable& operator=(const LogObservable&) = delete;
-            LogObservable& operator=(LogObservable&&) = default;
+            SpecialisedLogObservable(const SpecialisedLogObservable&) = delete;
+            SpecialisedLogObservable(SpecialisedLogObservable&&) = default;
+            SpecialisedLogObservable& operator=(const SpecialisedLogObservable&) = delete;
+            SpecialisedLogObservable& operator=(SpecialisedLogObservable&&) = default;
             virtual ~LogObservable() {}
     };
 
     /// make_logObservable creates a log observable from functors.
     template<typename HandleEvent, typename HandleException>
-    std::unique_ptr<LogObservable<HandleEvent, HandleException>> make_logObservable(
+    std::unique_ptr<SpecialisedLogObservable<HandleEvent, HandleException>> make_logObservable(
         HandleEvent handleEvent,
         HandleException handleException,
         std::string filename,
@@ -164,11 +162,11 @@ namespace opalKellyAtisSepia {
         },
         Expand expand = Expand()
     ) {
-        return sepia::make_unique<LogObservable<HandleEvent, HandleException>>(
+        return sepia::make_unique<SpecialisedLogObservable<HandleEvent, HandleException>>(
             std::forward<HandleEvent>(handleEvent),
             std::forward<HandleException>(handleException),
             std::move(filename),
-            slowDownToRealTime,
+            dispatch,
             std::move(mustRestart),
             std::move(expand)
         );
