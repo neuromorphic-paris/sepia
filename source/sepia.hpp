@@ -36,8 +36,8 @@ namespace sepia {
         /// timestamp represents the event's timestamp.
         int64_t timestamp;
 
-        /// isExposureMeasurement is false if the event is a change detection, and true if it is an exposure measurement.
-        bool isExposureMeasurement;
+        /// isThresholdCrossing is false if the event is a change detection, and true if it is a threshold crossing.
+        bool isThresholdCrossing;
 
         /// change detection: polarity is false if the light is decreasing.
         /// exposure measurement: polarity is false for a first threshold crossing.
@@ -83,13 +83,13 @@ namespace sepia {
     /// UnreadableFile is thrown when an input file does not exist or is not readable.
     class UnreadableFile : public std::runtime_error {
         public:
-            UnreadableFile(std::string filename) : std::runtime_error("The file " + filename + " could not be opened for reading") {}
+            UnreadableFile(std::string filename) : std::runtime_error("The file '" + filename + "' could not be opened for reading") {}
     };
 
     /// UnwritableFile is thrown whenan output file is not writable.
     class UnwritableFile : public std::runtime_error {
         public:
-            UnwritableFile(std::string filename) : std::runtime_error("The file " + filename + " could not be opened for writing") {}
+            UnwritableFile(std::string filename) : std::runtime_error("The file '" + filename + "'' could not be opened for writing") {}
     };
 
     /// WrongSignature is thrown when an input file does not have the expected signature.
@@ -209,7 +209,7 @@ namespace sepia {
 
             /// operator() handles an event.
             virtual void operator()(Event event) {
-                if (event.isExposureMeasurement) {
+                if (event.isThresholdCrossing) {
                     _handleThresholdCrossing(ThresholdCrossing{event.x, event.y, event.timestamp, event.polarity});
                 } else {
                     _handleChangeDetection(ChangeDetection{event.x, event.y, event.timestamp, event.polarity});
@@ -271,12 +271,12 @@ namespace sepia {
 
             /// Dispatch specifies when the events are dispatched.
             enum class Dispatch {
-                synchronouslyAndSkipOffset;
-                synchronously;
-                asFastAsPossible;
+                synchronouslyAndSkipOffset,
+                synchronously,
+                asFastAsPossible,
             };
 
-            LogObservable() : Observable {}
+            LogObservable() : Observable() {}
             LogObservable(const LogObservable&) = delete;
             LogObservable(LogObservable&&) = default;
             LogObservable& operator=(const LogObservable&) = delete;
@@ -324,9 +324,8 @@ namespace sepia {
                     auto readBytes = std::vector<unsigned char>(eventLength);
                     auto event = Event{};
                     try {
-
                         switch (dispatch) {
-                            case LogObservable::Dispatch::synchronouslyAndSkipOffset:
+                            case LogObservable::Dispatch::synchronouslyAndSkipOffset: {
                                 auto offsetSkipped = false;
                                 auto initialTimestamp = static_cast<int64_t>(0);
                                 auto timeReference = std::chrono::system_clock::now();
@@ -337,7 +336,7 @@ namespace sepia {
                                             _log.clear();
                                             _log.seekg(signature.length(), _log.beg);
                                             _expand = _initialExpand;
-                                            auto offsetSkipped = false;
+                                            offsetSkipped = false;
                                             timeReference = std::chrono::system_clock::now();
                                             continue;
                                         } else {
@@ -354,7 +353,8 @@ namespace sepia {
                                         this->_handleEvent(event);
                                     }
                                 }
-                            case LogObservable::Dispatch::synchronously:
+                            }
+                            case LogObservable::Dispatch::synchronously: {
                                 auto timeReference = std::chrono::system_clock::now();
                                 while (_running.load(std::memory_order_relaxed)) {
                                     _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
@@ -374,7 +374,8 @@ namespace sepia {
                                         this->_handleEvent(event);
                                     }
                                 }
-                            case LogObservable::Dispatch::asFastAsPossible:
+                            }
+                            case LogObservable::Dispatch::asFastAsPossible: {
                                 while (_running.load(std::memory_order_relaxed)) {
                                     _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
                                     if (_log.eof()) {
@@ -391,6 +392,7 @@ namespace sepia {
                                         this->_handleEvent(event);
                                     }
                                 }
+                            }
                         }
                     } catch (...) {
                         this->_handleException(std::current_exception());
