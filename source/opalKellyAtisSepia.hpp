@@ -43,7 +43,7 @@ namespace opalKellyAtisSepia {
                 bytes.push_back(static_cast<unsigned char>(reducedTimestamp & 0xff));
                 bytes.push_back(static_cast<unsigned char>(
                     ((reducedTimestamp & 0x1f00) >> 8)
-                    | (event.isExposureMeasurement ? 0x40 : 0x00)
+                    | (event.isThresholdCrossing ? 0x40 : 0x00)
                     | (event.polarity ? 0x80 : 0x00)
                     | ((event.x & 0x100) >> 3)
                 ));
@@ -76,7 +76,7 @@ namespace opalKellyAtisSepia {
                     event.x = ((static_cast<uint16_t>(bytes[1] & 0x20) << 3) | bytes[2]);
                     if (event.x < 304) {
                         event.timestamp = _timestampOffset + ((static_cast<int64_t>(bytes[1] & 0x1f) << 8) | bytes[0]);
-                        event.isExposureMeasurement = (((bytes[1] & 0x40) >> 6) == 0x01);
+                        event.isThresholdCrossing = (((bytes[1] & 0x40) >> 6) == 0x01);
                         event.polarity = (((bytes[1] & 0x80) >> 7) == 0x01);
                         return true;
                     }
@@ -131,14 +131,14 @@ namespace opalKellyAtisSepia {
                 },
                 Expand expand = Expand()
             ) :
-                sepia::LogObservable<HandleEvent, HandleException, Expand>(
+                sepia::SpecialisedLogObservable<HandleEvent, HandleException, Expand>(
                     std::forward<HandleEvent>(handleEvent),
                     std::forward<HandleException>(handleException),
                     filename,
                     std::move(expand),
                     Log::signature(),
                     4,
-                    slowDownToRealTime,
+                    dispatch,
                     std::move(mustRestart)
                 )
             {
@@ -147,7 +147,7 @@ namespace opalKellyAtisSepia {
             SpecialisedLogObservable(SpecialisedLogObservable&&) = default;
             SpecialisedLogObservable& operator=(const SpecialisedLogObservable&) = delete;
             SpecialisedLogObservable& operator=(SpecialisedLogObservable&&) = default;
-            virtual ~LogObservable() {}
+            virtual ~SpecialisedLogObservable() {}
     };
 
     /// make_logObservable creates a log observable from functors.
