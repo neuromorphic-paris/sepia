@@ -16,22 +16,33 @@ else
         if os.isfile(path.join(prefix, targetName)) then
             return 0
         else
-            local result = os.execute(
-                (sudo and 'sudo' or '')
-                .. ' wget -q -P '
-                .. prefix
-                .. ' '
-                .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
-            )
-            if result == 0 then
-                os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
+            if os.is('linux') then
+                local result = os.execute(
+                    (sudo and 'sudo' or '')
+                    .. ' wget -q -P '
+                    .. prefix
+                    .. ' '
+                    .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
+                )
+                if result == 0 then
+                    os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
+                end
+                return result
+            elseif os.is('macosx') then
+                return os.execute(
+                    (sudo and 'sudo' or '')
+                    .. ' curl -s "'
+                    .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
+                    .. '" -o "'
+                    .. path.join(prefix, targetName)
+                    .. '"'
+                )
             end
-            return result
         end
     end
 
     -- Installation under Linux
-    if (os.is('linux')) then
+    if os.is('linux') then
         -- @DEV Check wether the linux os is 64 bits. Starting from premake 4.4, the method os.is64bit should be used instead.
         local pipe = io.popen('uname -m')
         local result = pipe:read('*a')
@@ -115,7 +126,7 @@ else
         os.execute('sudo udevadm control --reload-rules')
 
     -- Installation under Mac OS X
-    elseif (os.is('macosx')) then
+    elseif os.is('macosx') then
         if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', 'opalkellyfrontpanel.h', false) ~= 0 then
             print(
                 string.char(27)
