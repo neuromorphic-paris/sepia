@@ -12,17 +12,21 @@ if _ACTION == 'uninstall' then
         os.execute('rm -f ' .. path.join(prefix, 'lib/libopalkellyfrontpanel.dylib'))
     end
 else
-    local download = function(localPrefix, filename, sudo)
-        if os.isfile(path.join(localPrefix, filename)) then
+    local download = function(prefix, targetName, sourceName, sudo)
+        if os.isfile(path.join(prefix, targetName)) then
             return 0
         else
-            return os.execute(
+            local result = os.execute(
                 (sudo and 'sudo' or '')
                 .. ' wget -q -P '
-                .. localPrefix
+                .. prefix
                 .. ' '
-                .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', filename)
+                .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
             )
+            if result == 0 then
+                os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
+            end
+            return result
         end
     end
 
@@ -35,7 +39,7 @@ else
 
         --  Installation for 64 bits platforms
         if string.sub(result, 1, string.len('x86_64')) == 'x86_64' then
-            if download('/usr/lib', 'libudev.x86_64.so.0.13.0', true) ~= 0 then
+            if download('/usr/lib/', 'libudev.so.0.13.0', 'libudev.x86_64.so.0.13.0', true) ~= 0 then
                 print(
                     string.char(27)
                     .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -45,7 +49,7 @@ else
                 os.exit()
             end
             os.execute('sudo ln -s -f /usr/lib/libudev.so.0.13.0 /usr/lib/libudev.so.0')
-            if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', false) ~= 0 then
+            if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', 'opalkellyfrontpanel.h', false) ~= 0 then
                 print(
                     string.char(27)
                     .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -54,7 +58,7 @@ else
                 )
                 os.exit()
             end
-            if download(path.join(prefix, 'lib'), 'libopalkellyfrontpanel.x86_64.so', false) ~= 0 then
+            if download(path.join(prefix, 'lib'), 'libopalkellyfrontpanel.so', 'libopalkellyfrontpanel.x86_64.so', false) ~= 0 then
                 print(
                     string.char(27)
                     .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -67,7 +71,7 @@ else
 
         -- Installation for 32 bits platforms
         elseif string.sub(result, 1, string.len('i686')) == 'i686' then
-            if download('/usr/lib', 'libudev.i686.so.0.13.0', true) ~= 0 then
+            if download('/usr/lib/', 'libudev.so.0.13.0', 'libudev.i686.so.0.13.0', true) ~= 0 then
                 print(
                     string.char(27)
                     .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -77,7 +81,7 @@ else
                 os.exit()
             end
             os.execute('sudo ln -s -f /usr/lib/libudev.so.0.13.0 /usr/lib/libudev.so.0')
-            if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', false) ~= 0 then
+            if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', 'opalkellyfrontpanel.h', false) ~= 0 then
                 print(
                     string.char(27)
                     .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -86,7 +90,7 @@ else
                 )
                 os.exit()
             end
-            if download(path.join(prefix, 'lib'), 'libopalkellyfrontpanel.i686.so', false) ~= 0 then
+            if download(path.join(prefix, 'lib'), 'libopalkellyfrontpanel.so', 'libopalkellyfrontpanel.i686.so', false) ~= 0 then
                 print(
                     string.char(27)
                     .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -112,7 +116,7 @@ else
 
     -- Installation under Mac OS X
     elseif (os.is('macosx')) then
-        if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', false) ~= 0 then
+        if download(path.join(prefix, 'include'), 'opalkellyfrontpanel.h', 'opalkellyfrontpanel.h', false) ~= 0 then
             print(
                 string.char(27)
                 .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
@@ -121,7 +125,7 @@ else
             )
             os.exit()
         end
-        if download(path.join(prefix, 'lib'), 'libopalkellyfrontpanel.dylib', false) ~= 0 then
+        if download(path.join(prefix, 'lib'), 'libopalkellyfrontpanel.dylib', 'libopalkellyfrontpanel.dylib', false) ~= 0 then
             print(
                 string.char(27)
                 .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
