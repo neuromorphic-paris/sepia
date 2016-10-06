@@ -1,21 +1,37 @@
 if _ACTION == 'uninstall' then
     os.rmdir(path.join(prefix, 'share/sepia'))
 else
-    local download = function(localPrefix, filename)
-        if os.isfile(path.join(localPrefix, filename)) then
+    local download = function(prefix, targetName, sourceName, sudo)
+        if os.isfile(path.join(prefix, targetName)) then
             return 0
         else
-            return os.execute(
-                'wget -q -P '
-                .. localPrefix
-                .. ' '
-                .. path.join('134.157.180.144:3002/firmwares/', filename)
-            )
+            if os.is('linux') then
+                local result = os.execute(
+                    (sudo and 'sudo' or '')
+                    .. ' wget -q -P '
+                    .. prefix
+                    .. ' '
+                    .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
+                )
+                if result == 0 then
+                    os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
+                end
+                return result
+            elseif os.is('macosx') then
+                return os.execute(
+                    (sudo and 'sudo' or '')
+                    .. ' curl -s "'
+                    .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
+                    .. '" -o "'
+                    .. path.join(prefix, targetName)
+                    .. '"'
+                )
+            end
         end
     end
 
     os.mkdir(path.join(prefix, 'share/sepia'))
-    if download(path.join(prefix, 'share/sepia'), 'atis.1.1.1.bit') ~= 0 then
+    if download(path.join(prefix, 'share/sepia'), 'atis.1.1.1.bit', 'atis.1.1.1.bit', false) ~= 0 then
         print(
             string.char(27)
             .. '[31mFirmwares download failed. Make sure that you are connected to the Vision Institute local network.'
