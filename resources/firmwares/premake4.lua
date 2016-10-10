@@ -11,9 +11,10 @@ else
                     .. ' wget -q -P '
                     .. prefix
                     .. ' '
-                    .. path.join('134.157.180.144:3002/firmwares/', sourceName)
+                    .. '134.157.180.144:3002/firmwares/'
+                    .. sourceName
                 )
-                if result == 0 then
+                if result == 0 and targetName ~= sourceName then
                     os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
                 end
                 return result
@@ -21,7 +22,8 @@ else
                 return os.execute(
                     (sudo and 'sudo' or '')
                     .. ' curl -s "'
-                    .. path.join('134.157.180.144:3002/firmwares/', sourceName)
+                    .. '134.157.180.144:3002/firmwares/'
+                    .. sourceName
                     .. '" -o "'
                     .. path.join(prefix, targetName)
                     .. '"'

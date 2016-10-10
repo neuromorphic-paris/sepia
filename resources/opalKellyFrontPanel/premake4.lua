@@ -22,9 +22,10 @@ else
                     .. ' wget -q -P '
                     .. prefix
                     .. ' '
-                    .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
+                    .. '134.157.180.144:3002/opalKellyFrontPanel/'
+                    .. sourceName
                 )
-                if result == 0 then
+                if result == 0 and targetName ~= sourceName then
                     os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
                 end
                 return result
@@ -32,7 +33,8 @@ else
                 return os.execute(
                     (sudo and 'sudo' or '')
                     .. ' curl -s "'
-                    .. path.join('134.157.180.144:3002/opalKellyFrontPanel/', sourceName)
+                    .. '134.157.180.144:3002/opalKellyFrontPanel/'
+                    .. sourceName
                     .. '" -o "'
                     .. path.join(prefix, targetName)
                     .. '"'
@@ -114,7 +116,7 @@ else
         end
 
         -- Copy the udev-rules, required for non-superuser access to the device
-        if download('/etc/udev/rules.d', 'opalkelly.rules', true) ~= 0 then
+        if download('/etc/udev/rules.d', 'opalkelly.rules', 'opalkelly.rules', true) ~= 0 then
             print(
                 string.char(27)
                 .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
