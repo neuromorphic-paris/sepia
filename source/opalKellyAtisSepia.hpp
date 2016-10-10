@@ -486,7 +486,7 @@ namespace opalKellyAtisSepia {
 
                         if (packIndex == 15) {
                             _opalKellyFrontPanel.SetWireInValue(0x01, pack);
-                            _opalKellyFrontPanel.SetWireInValue(0x02, (fillIterator - fill.begin()) / 16);
+                            _opalKellyFrontPanel.SetWireInValue(0x02, static_cast<uint32_t>((fillIterator - fill.begin()) / 16));
                             _opalKellyFrontPanel.UpdateWireIns();
                             _opalKellyFrontPanel.ActivateTriggerIn(0x40, 3);
                             packIndex = 0;
