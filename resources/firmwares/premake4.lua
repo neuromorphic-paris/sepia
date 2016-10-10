@@ -14,7 +14,7 @@ else
                     .. '134.157.180.144:3002/firmwares/'
                     .. sourceName
                 )
-                if result == 0 then
+                if result == 0 and targetName ~= sourceName then
                     os.execute((sudo and 'sudo' or '') .. ' mv ' .. path.join(prefix, sourceName) .. ' ' .. path.join(prefix, targetName))
                 end
                 return result
