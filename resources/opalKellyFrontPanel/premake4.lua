@@ -116,7 +116,7 @@ else
         end
 
         -- Copy the udev-rules, required for non-superuser access to the device
-        if download('/etc/udev/rules.d', 'opalkelly.rules', true) ~= 0 then
+        if download('/etc/udev/rules.d', 'opalkelly.rules', 'opalkelly.rules', true) ~= 0 then
             print(
                 string.char(27)
                 .. '[31mOpalKellyFrontPanel download failed. Make sure that you are connected to the Vision Institute local network.'
