@@ -2,7 +2,7 @@
 
 # Sepia
 
-Sepia is an almost dependency-free library to communicate with an event-based camera. It is an header-only library.
+Sepia is a library to communicate with an event-based camera. It is an header-only library.
 
 # Installation
 
