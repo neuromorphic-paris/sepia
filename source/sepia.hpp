@@ -631,7 +631,7 @@ namespace sepia {
                 return trimIterator;
             }
 
-            /// hasCharacter determines wheter a character is a white space.
+            /// hasCharacter determines wheter a character is in a string of characters.
             static constexpr bool hasCharacter(const char* characters, const char character) {
                 return *characters != '\0' && (*characters == character || hasCharacter(characters + 1, character));
             }
@@ -953,7 +953,7 @@ namespace sepia {
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
                 auto end = begin;
-                for (; hasCharacter(separationCharacters, *end) && hasCharacter(whitespaceCharacters, *end); ++end) {
+                for (; !hasCharacter(separationCharacters, *end) && !hasCharacter(whitespaceCharacters, *end); ++end) {
                     if (end == fileEnd) {
                         throw ParseError("unexpected end of file", line);
                     }
@@ -1009,7 +1009,7 @@ namespace sepia {
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
                 auto end = begin;
-                for (; hasCharacter(separationCharacters, *end) && hasCharacter(whitespaceCharacters, *end); ++end) {
+                for (; !hasCharacter(separationCharacters, *end) && !hasCharacter(whitespaceCharacters, *end); ++end) {
                     if (end == fileEnd) {
                         throw ParseError("unexpected end of file", line);
                     }
