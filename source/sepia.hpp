@@ -83,13 +83,13 @@ namespace sepia {
     /// UnreadableFile is thrown when an input file does not exist or is not readable.
     class UnreadableFile : public std::runtime_error {
         public:
-            UnreadableFile(std::string filename) : std::runtime_error("The file '" + filename + "' could not be opened for reading") {}
+            UnreadableFile(std::string filename) : std::runtime_error("The file '" + filename + "' could not be open for reading") {}
     };
 
     /// UnwritableFile is thrown whenan output file is not writable.
     class UnwritableFile : public std::runtime_error {
         public:
-            UnwritableFile(std::string filename) : std::runtime_error("The file '" + filename + "'' could not be opened for writing") {}
+            UnwritableFile(std::string filename) : std::runtime_error("The file '" + filename + "'' could not be open for writing") {}
     };
 
     /// WrongSignature is thrown when an input file does not have the expected signature.
