@@ -72,7 +72,7 @@ namespace opalKellyAtisSepia {
             /// operator() handles unsigned chars.
             virtual bool operator()(std::vector<unsigned char> bytes, sepia::Event& event) {
                 if (bytes[3] < 240) {
-                    event.y = static_cast<uint16_t>(239 - bytes[3]);
+                    event.y = static_cast<uint16_t>(bytes[3]);
                     event.x = ((static_cast<uint16_t>(bytes[1] & 0x20) << 3) | bytes[2]);
                     if (event.x < 304) {
                         event.timestamp = _timestampOffset + ((static_cast<int64_t>(bytes[1] & 0x1f) << 8) | bytes[0]);
@@ -576,8 +576,11 @@ namespace opalKellyAtisSepia {
                                 for (auto eventIndex = static_cast<unsigned long>(0); eventIndex < numberOfEvents; ++eventIndex) {
                                     const auto eventsDataIterator = eventsData.begin() + 4 * eventIndex;
                                     eventBytes.assign(eventsDataIterator, eventsDataIterator + 4);
-                                    if (_expand(eventBytes, event) && !this->push(event)) {
-                                        throw std::runtime_error("Computer's FIFO overflow");
+                                    if (_expand(eventBytes, event)) {
+                                        event.y = 239 - event.y;
+                                        if (!this->push(event)) {
+                                            throw std::runtime_error("Computer's FIFO overflow");
+                                        }
                                     }
                                 }
                             } else {
