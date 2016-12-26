@@ -282,6 +282,7 @@ namespace sepia {
                         | static_cast<uint8_t>(event.isThresholdCrossing ? 0b1000000 : 0)
                         | static_cast<uint8_t>(event.polarity ? 0b10000000 : 0)
                     );
+                    _previousTimestamp = event.timestamp;
                 }
                 _accessingEventStream.clear(std::memory_order_release);
             }
@@ -311,6 +312,7 @@ namespace sepia {
                 }
                 _logging = false;
                 _eventStream.close();
+                _previousTimestamp = 0;
                 _accessingEventStream.clear(std::memory_order_release);
             }
 
@@ -348,10 +350,8 @@ namespace sepia {
                 HandleEvent handleEvent,
                 HandleException handleException,
                 std::string filename,
-                EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
-                std::function<bool()> mustRestart = []() -> bool {
-                    return false;
-                }
+                EventStreamObservable::Dispatch dispatch,
+                std::function<bool()> mustRestart
             ) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
                 _handleException(std::forward<HandleException>(handleException)),
@@ -482,6 +482,26 @@ namespace sepia {
             std::function<bool()> _mustRestart;
     };
 
+    /// make_eventStreamObservable creates an event stream observable from functors.
+    template<typename HandleEvent, typename HandleException>
+    std::unique_ptr<SpecialisedEventStreamObservable<HandleEvent, HandleException>> make_eventStreamObservable(
+        HandleEvent handleEvent,
+        HandleException handleException,
+        std::string filename,
+        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
+        std::function<bool()> mustRestart = []() -> bool {
+            return false;
+        }
+    ) {
+        return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
+            std::forward<HandleEvent>(handleEvent),
+            std::forward<HandleException>(handleException),
+            std::move(filename),
+            dispatch,
+            std::move(mustRestart)
+        );
+    }
+
     /// Forward-declare parameter for referencing in UnvalidatedParameter.
     class Parameter;
 
@@ -571,6 +591,7 @@ namespace sepia {
             virtual void load(const Parameter& parameter) = 0;
 
         protected:
+
             /// trim removes white space and line break characters.
             static const std::string::const_iterator trim(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& lineCount) {
                 auto trimIterator = begin;
@@ -868,6 +889,7 @@ namespace sepia {
             }
 
         protected:
+
             /// ListExpecting describes the next character expected by the parser.
             enum class ListExpecting {
                 whitespace,
@@ -987,6 +1009,7 @@ namespace sepia {
             }
 
         protected:
+
             /// validate determines if the number is valid regarding the given constraints.
             void validate() {
                 if (std::isnan(_value)) {
@@ -1220,8 +1243,8 @@ namespace sepia {
             SpecialisedCamera(
                 HandleEvent handleEvent,
                 HandleException handleException,
-                std::size_t fifoSize = 1 << 24,
-                std::chrono::milliseconds sleepDuration = std::chrono::milliseconds(10)
+                std::size_t fifoSize,
+                std::chrono::milliseconds sleepDuration
             ) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
                 _handleException(std::forward<HandleException>(handleException)),

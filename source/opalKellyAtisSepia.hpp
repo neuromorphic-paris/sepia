@@ -180,10 +180,10 @@ namespace opalKellyAtisSepia {
             SpecialisedCamera<HandleEvent, HandleException>(
                 HandleEvent handleEvent,
                 HandleException handleException,
-                std::unique_ptr<sepia::UnvalidatedParameter> unvalidatedParameter = sepia::make_unique<sepia::UnvalidatedParameter>(std::string()),
-                std::size_t fifoSize = 1 << 24,
-                std::string serial = std::string(),
-                std::chrono::milliseconds sleepDuration = std::chrono::milliseconds(10)
+                std::unique_ptr<sepia::UnvalidatedParameter> unvalidatedParameter,
+                std::size_t fifoSize,
+                std::string serial,
+                std::chrono::milliseconds sleepDuration
             ) :
                 sepia::SpecialisedCamera<HandleEvent, HandleException>(
                     std::forward<HandleEvent>(handleEvent),
