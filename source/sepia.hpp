@@ -98,6 +98,18 @@ namespace sepia {
             WrongSignature(std::string filename) : std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
     };
 
+    /// UnsupportedVersion is thrown when an Event Stream file uses an unsupported version.
+    class UnsupportedVersion : public std::runtime_error {
+        public:
+            UnsupportedVersion(std::string filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
+    };
+
+    /// UnsupportedMode is thrown when an Event Stream file uses an unsupported mode.
+    class UnsupportedMode : public std::runtime_error {
+        public:
+            UnsupportedMode(std::string filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported mode") {}
+    };
+
     /// EndOfFile is thrown when the end of an input file is reached.
     class EndOfFile : public std::runtime_error {
         public:
@@ -289,7 +301,7 @@ namespace sepia {
 
             /// open is a thread-safe method to start logging events to the given file.
             virtual void open(std::string filename) {
-                _eventStream.open(filename);
+                _eventStream.open(filename, std::ifstream::binary);
                 if (!_eventStream.good()) {
                     throw UnwritableFile(filename);
                 }
@@ -298,7 +310,7 @@ namespace sepia {
                     _accessingEventStream.clear(std::memory_order_release);
                     throw std::runtime_error("Already logging");
                 }
-                _eventStream.write("Event Stream010", 14);
+                _eventStream.write("Event Stream010", 15);
                 _logging = true;
                 _accessingEventStream.clear(std::memory_order_release);
             }
@@ -351,11 +363,12 @@ namespace sepia {
                 HandleException handleException,
                 std::string filename,
                 EventStreamObservable::Dispatch dispatch,
-                std::function<bool()> mustRestart
+                std::function<bool()> mustRestart,
+                std::size_t chunkSize
             ) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
                 _handleException(std::forward<HandleException>(handleException)),
-                _eventStream(filename),
+                _eventStream(filename, std::ifstream::binary),
                 _running(true),
                 _mustRestart(std::move(mustRestart))
             {
@@ -363,106 +376,124 @@ namespace sepia {
                     throw UnreadableFile(filename);
                 }
                 {
-                    const auto readSignature = std::string("Event Stream01");
+                    const auto readSignature = std::string("Event Stream");
                     _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    if (_eventStream.eof() || readSignature != "Event Stream01") {
+                    if (_eventStream.eof() || readSignature != "Event Stream") {
                         throw WrongSignature(filename);
                     }
                 }
-                const auto mode = _eventStream.get();
-                if (_eventStream.eof()) {
-                    throw WrongSignature(filename);
+                {
+                    const auto versionMajor = _eventStream.get();
+                    const auto versionMinor = _eventStream.get();
+                    const auto mode = _eventStream.get();
+                    if (_eventStream.eof()) {
+                        throw WrongSignature(filename);
+                    }
+                    if (versionMajor != '0' || versionMinor != '1') {
+                        throw UnsupportedVersion(filename);
+                    }
+                    if (_eventStream.eof() || mode != '0') {
+                        throw UnsupportedMode(filename);
+                    }
                 }
-
-                switch (mode) {
-                    case 0: {
-                        _loop = std::thread([this, dispatch]() -> void {
-                            try {
-                                switch (dispatch) {
-                                    case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
-                                        auto offsetSkipped = false;
-                                        auto timeReference = std::chrono::system_clock::now();
-                                        auto initialTimestamp = static_cast<uint64_t>(0);
-                                        auto eventStreamStateMachine = make_eventStreamStateMachine(
-                                            [this, &offsetSkipped, &timeReference, &initialTimestamp](Event event) -> void {
-                                                if (offsetSkipped) {
-                                                    std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
-                                                } else {
-                                                    offsetSkipped = true;
-                                                    initialTimestamp = event.timestamp;
-                                                }
-                                                this->_handleEvent(event);
-                                            }
-                                        );
-                                        while (_running.load(std::memory_order_relaxed)) {
-                                            eventStreamStateMachine(_eventStream.get());
-                                            if (_eventStream.eof()) {
-                                                if (_mustRestart()) {
-                                                    _eventStream.clear();
-                                                    _eventStream.seekg(std::string("Event Stream010").length(), _eventStream.beg);
-                                                    offsetSkipped = false;
-                                                    timeReference = std::chrono::system_clock::now();
-                                                    eventStreamStateMachine.reset();
-                                                    continue;
-                                                } else {
-                                                    throw EndOfFile();
-                                                }
-                                            }
+                _loop = std::thread([this, dispatch, chunkSize]() -> void {
+                    try {
+                        auto bytes = std::vector<uint8_t>(chunkSize);
+                        switch (dispatch) {
+                            case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
+                                auto offsetSkipped = false;
+                                auto timeReference = std::chrono::system_clock::now();
+                                auto initialTimestamp = static_cast<uint64_t>(0);
+                                auto eventStreamStateMachine = make_eventStreamStateMachine(
+                                    [this, &offsetSkipped, &timeReference, &initialTimestamp](Event event) -> void {
+                                        if (offsetSkipped) {
+                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
+                                        } else {
+                                            offsetSkipped = true;
+                                            initialTimestamp = event.timestamp;
                                         }
+                                        this->_handleEvent(event);
                                     }
-                                    case EventStreamObservable::Dispatch::synchronously: {
-                                        auto timeReference = std::chrono::system_clock::now();
-                                        auto eventStreamStateMachine = make_eventStreamStateMachine(
-                                            [this, &timeReference](Event event) -> void {
-                                                std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
-                                                this->_handleEvent(event);
-                                            }
-                                        );
-                                        while (_running.load(std::memory_order_relaxed)) {
-                                            eventStreamStateMachine(_eventStream.get());
-                                            if (_eventStream.eof()) {
-                                                if (_mustRestart()) {
-                                                    _eventStream.clear();
-                                                    _eventStream.seekg(std::string("Event Stream010").length(), _eventStream.beg);
-                                                    timeReference = std::chrono::system_clock::now();
-                                                    eventStreamStateMachine.reset();
-                                                    continue;
-                                                } else {
-                                                    throw EndOfFile();
-                                                }
-                                            }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            eventStreamStateMachine(*byteIterator);
                                         }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            offsetSkipped = false;
+                                            eventStreamStateMachine.reset();
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
                                     }
-                                    case EventStreamObservable::Dispatch::asFastAsPossible: {
-                                        auto eventStreamStateMachine = make_eventStreamStateMachine(
-                                            [this](Event event) -> void {
-                                                this->_handleEvent(event);
-                                            }
-                                        );
-                                        while (_running.load(std::memory_order_relaxed)) {
-                                            eventStreamStateMachine(_eventStream.get());
-                                            if (_eventStream.eof()) {
-                                                if (_mustRestart()) {
-                                                    _eventStream.clear();
-                                                    _eventStream.seekg(std::string("Event Stream010").length(), _eventStream.beg);
-                                                    eventStreamStateMachine.reset();
-                                                    continue;
-                                                } else {
-                                                    throw EndOfFile();
-                                                }
-                                            }
-                                        }
+                                    for (auto&& byte : bytes) {
+                                        eventStreamStateMachine(byte);
                                     }
                                 }
-                            } catch (...) {
-                                this->_handleException(std::current_exception());
                             }
-                        });
+                            case EventStreamObservable::Dispatch::synchronously: {
+                                auto timeReference = std::chrono::system_clock::now();
+                                auto eventStreamStateMachine = make_eventStreamStateMachine(
+                                    [this, &timeReference](Event event) -> void {
+                                        std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
+                                        this->_handleEvent(event);
+                                    }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            eventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            eventStreamStateMachine.reset();
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        eventStreamStateMachine(byte);
+                                    }
+                                }
+                            }
+                            case EventStreamObservable::Dispatch::asFastAsPossible: {
+                                auto eventStreamStateMachine = make_eventStreamStateMachine(
+                                    [this](Event event) -> void {
+                                        this->_handleEvent(event);
+                                    }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            eventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            eventStreamStateMachine.reset();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        eventStreamStateMachine(byte);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (...) {
+                        this->_handleException(std::current_exception());
                     }
-                    default: {
-                        throw WrongSignature(filename);
-                    }
-                }
+                });
             }
             SpecialisedEventStreamObservable(const SpecialisedEventStreamObservable&) = delete;
             SpecialisedEventStreamObservable(SpecialisedEventStreamObservable&&) = default;
@@ -491,14 +522,16 @@ namespace sepia {
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
         std::function<bool()> mustRestart = []() -> bool {
             return false;
-        }
+        },
+        std::size_t chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
             std::forward<HandleEvent>(handleEvent),
             std::forward<HandleException>(handleException),
             std::move(filename),
             dispatch,
-            std::move(mustRestart)
+            std::move(mustRestart),
+            chunkSize
         );
     }
 
