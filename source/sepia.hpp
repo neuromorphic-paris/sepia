@@ -34,7 +34,7 @@ namespace sepia {
         uint16_t y;
 
         /// timestamp represents the event's timestamp.
-        int64_t timestamp;
+        uint64_t timestamp;
 
         /// isThresholdCrossing is false if the event is a change detection, and true if it is a threshold crossing.
         bool isThresholdCrossing;
@@ -56,7 +56,7 @@ namespace sepia {
         uint16_t y;
 
         /// timestamp represents the event's timestamp.
-        int64_t timestamp;
+        uint64_t timestamp;
 
         /// isIncrease is false if the light is decreasing.
         bool isIncrease;
@@ -74,7 +74,7 @@ namespace sepia {
         uint16_t y;
 
         /// timestamp represents the event's timestamp.
-        int64_t timestamp;
+        uint64_t timestamp;
 
         /// isSecond is false if the event is a first threshold crossing.
         bool isSecond;
@@ -95,7 +95,19 @@ namespace sepia {
     /// WrongSignature is thrown when an input file does not have the expected signature.
     class WrongSignature : public std::runtime_error {
         public:
-            WrongSignature() : std::runtime_error("The input does not have the expected signature") {}
+            WrongSignature(std::string filename) : std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
+    };
+
+    /// UnsupportedVersion is thrown when an Event Stream file uses an unsupported version.
+    class UnsupportedVersion : public std::runtime_error {
+        public:
+            UnsupportedVersion(std::string filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
+    };
+
+    /// UnsupportedMode is thrown when an Event Stream file uses an unsupported mode.
+    class UnsupportedMode : public std::runtime_error {
+        public:
+            UnsupportedMode(std::string filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported mode") {}
     };
 
     /// EndOfFile is thrown when the end of an input file is reached.
@@ -126,70 +138,6 @@ namespace sepia {
     class ParameterError : public std::logic_error {
         public:
             ParameterError(std::string what) : std::logic_error(what) {}
-    };
-
-    /// Log writes the events to a file.
-    template <typename Compress>
-    class Log {
-        public:
-            Log(Compress compress):
-                _compress(std::forward<Compress>(compress)),
-                _logging(false)
-            {
-                _accessingLog.clear(std::memory_order_release);
-            }
-            Log(const Log&) = delete;
-            Log(Log&&) = default;
-            Log& operator=(const Log&) = delete;
-            Log& operator=(Log&&) = default;
-            virtual ~Log() {}
-
-            /// operator() handles an event.
-            virtual void operator()(Event event) {
-                while (_accessingLog.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    const auto bytes = _compress(event);
-                    _log.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-                }
-                _accessingLog.clear(std::memory_order_release);
-            }
-
-            /// writeTo is a thread-safe method to start logging the event stream to the given file.
-            virtual void writeTo(std::string filename) {
-                _log.open(filename);
-                if (!_log.good()) {
-                    throw UnwritableFile(filename);
-                }
-                while (_accessingLog.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    _accessingLog.clear(std::memory_order_release);
-                    throw std::runtime_error("Already logging");
-                }
-                _log.write(reinterpret_cast<const char*>(getSignature().data()), getSignature().size());
-                _logging = true;
-                _accessingLog.clear(std::memory_order_release);
-            }
-
-            /// stop is a thread-safe method to stop logging the events and close the file.
-            virtual void stop() {
-                while (_accessingLog.test_and_set(std::memory_order_acquire)) {}
-                if (!_logging) {
-                    _accessingLog.clear(std::memory_order_release);
-                    throw std::runtime_error("Was not logging");
-                }
-                _logging = false;
-                _log.close();
-                _accessingLog.clear(std::memory_order_release);
-            }
-
-            /// getSignature returns the log event handler signature.
-            virtual std::string getSignature() const = 0;
-
-        protected:
-            Compress _compress;
-            std::ofstream _log;
-            bool _logging;
-            std::atomic_flag _accessingLog;
     };
 
     /// Split separates a stream of events into a stream of change detections and a stream of theshold crossings.
@@ -233,40 +181,161 @@ namespace sepia {
         );
     }
 
-    /// Observable represents an entity that generates events.
-    class Observable {
+    /// EventStreamStateMachine implements the event stream state machine for use in more high-level components.
+    template <typename HandleEvent>
+    class EventStreamStateMachine {
         public:
-            Observable() = default;
-            Observable(const Observable&) = delete;
-            Observable(Observable&&) = default;
-            Observable& operator=(const Observable&) = delete;
-            Observable& operator=(Observable&&) = default;
-            virtual ~Observable() {}
-    };
-
-    /// SpecialisedObservable represents a template-specialised entity that generates events.
-    template <typename HandleEvent, typename HandleException>
-    class SpecialisedObservable : public virtual Observable {
-        public:
-            SpecialisedObservable(HandleEvent handleEvent, HandleException handleException) :
-                Observable(),
+            EventStreamStateMachine(HandleEvent handleEvent) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
-                _handleException(std::forward<HandleException>(handleException))
+                _previousTimestamp(0),
+                _state(State::idle)
             {
             }
-            SpecialisedObservable(const SpecialisedObservable&) = delete;
-            SpecialisedObservable(SpecialisedObservable&&) = default;
-            SpecialisedObservable& operator=(const SpecialisedObservable&) = delete;
-            SpecialisedObservable& operator=(SpecialisedObservable&&) = default;
-            virtual ~SpecialisedObservable() {}
+            EventStreamStateMachine(const EventStreamStateMachine&) = default;
+            EventStreamStateMachine(EventStreamStateMachine&&) = default;
+            EventStreamStateMachine& operator=(const EventStreamStateMachine&) = default;
+            EventStreamStateMachine& operator=(EventStreamStateMachine&&) = default;
+            virtual ~EventStreamStateMachine() {}
+
+            /// operator() handles a byte.
+            virtual void operator()(uint8_t byte) {
+                switch (_state) {
+                    case State::idle: {
+                        if ((byte & 0b11111) == 0b11111) {
+                            _previousTimestamp += ((byte & 0b11100000) >> 5) * 31;
+                        } else {
+                            _event.timestamp = _previousTimestamp + (byte & 0b11111);
+                            _previousTimestamp = _event.timestamp;
+                            _event.x = ((byte & 0b11100000) >> 5);
+                            _state = State::byte0;
+                        }
+                        break;
+                    }
+                    case State::byte0: {
+                        _event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
+                        _event.y = ((byte & 0b11000000) >> 6);
+                        _state = State::byte1;
+                        break;
+                    }
+                    case State::byte1: {
+                        _event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
+                        _event.isThresholdCrossing = (((byte & 0b1000000) >> 6) == 1);
+                        _event.polarity = (((byte & 0b10000000) >> 7) == 1);
+                        _handleEvent(_event);
+                        _state = State::idle;
+                        break;
+                    }
+                }
+            }
+
+            /// reset initialises the state machine.
+            virtual void reset() {
+                _previousTimestamp = 0;
+                _state = State::idle;
+            }
 
         protected:
+
+            /// State represents the current state machine's state.
+            enum class State {
+                idle,
+                byte0,
+                byte1,
+            };
+
             HandleEvent _handleEvent;
-            HandleException _handleException;
+            uint64_t _previousTimestamp;
+            State _state;
+            Event _event;
     };
 
-    /// LogObservable is a log file reader.
-    class LogObservable : public virtual Observable {
+    /// make_eventStreamStateMachine creates a log observable from functors.
+    template<typename HandleEvent>
+    EventStreamStateMachine<HandleEvent> make_eventStreamStateMachine(HandleEvent handleEvent) {
+        return EventStreamStateMachine<HandleEvent>(std::forward<HandleEvent>(handleEvent));
+    }
+
+    /// EventStreamWriter writes events to an Event Stream file.
+    class EventStreamWriter {
+        public:
+            EventStreamWriter():
+                _logging(false),
+                _previousTimestamp(0)
+            {
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+            EventStreamWriter(const EventStreamWriter&) = delete;
+            EventStreamWriter(EventStreamWriter&&) = default;
+            EventStreamWriter& operator=(const EventStreamWriter&) = delete;
+            EventStreamWriter& operator=(EventStreamWriter&&) = default;
+            virtual ~EventStreamWriter() {}
+
+            /// operator() handles an event.
+            virtual void operator()(Event event) {
+                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
+                if (_logging) {
+                    auto relativeTimestamp = event.timestamp - _previousTimestamp;
+                    if (relativeTimestamp > 30) {
+                        const auto numberOfOverflows = relativeTimestamp / 31;
+                        for (auto index = static_cast<std::size_t>(0); index < numberOfOverflows / 8; ++index) {
+                            _eventStream.put(static_cast<uint8_t>(0b11111111));
+                        }
+                        const auto numberOfOverflowsLeft = numberOfOverflows % 8;
+                        if (numberOfOverflowsLeft > 0) {
+                            _eventStream.put(static_cast<uint8_t>(0b11111) | static_cast<uint8_t>(numberOfOverflowsLeft << 5));
+                        }
+                        relativeTimestamp -= numberOfOverflows * 31;
+                    }
+                    _eventStream.put(static_cast<uint8_t>(relativeTimestamp) | static_cast<uint8_t>((event.x & 0b111) << 5));
+                    _eventStream.put(static_cast<uint8_t>((event.x & 0b111111000) >> 3) | static_cast<uint8_t>((event.y & 0b11) << 6));
+                    _eventStream.put(
+                        static_cast<uint8_t>((event.y & 0b11111100) >> 2)
+                        | static_cast<uint8_t>(event.isThresholdCrossing ? 0b1000000 : 0)
+                        | static_cast<uint8_t>(event.polarity ? 0b10000000 : 0)
+                    );
+                    _previousTimestamp = event.timestamp;
+                }
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+
+            /// open is a thread-safe method to start logging events to the given file.
+            virtual void open(std::string filename) {
+                _eventStream.open(filename, std::ifstream::binary);
+                if (!_eventStream.good()) {
+                    throw UnwritableFile(filename);
+                }
+                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
+                if (_logging) {
+                    _accessingEventStream.clear(std::memory_order_release);
+                    throw std::runtime_error("Already logging");
+                }
+                _eventStream.write("Event Stream010", 15);
+                _logging = true;
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+
+            /// close is a thread-safe method to stop logging the events and close the file.
+            virtual void close() {
+                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
+                if (!_logging) {
+                    _accessingEventStream.clear(std::memory_order_release);
+                    throw std::runtime_error("Was not logging");
+                }
+                _logging = false;
+                _eventStream.close();
+                _previousTimestamp = 0;
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+
+        protected:
+            std::ofstream _eventStream;
+            bool _logging;
+            std::atomic_flag _accessingEventStream;
+            uint64_t _previousTimestamp;
+    };
+
+    /// EventStreamObservable dispatches events from an event stream file.
+    class EventStreamObservable {
         public:
 
             /// Dispatch specifies when the events are dispatched.
@@ -276,74 +345,66 @@ namespace sepia {
                 asFastAsPossible,
             };
 
-            LogObservable() : Observable() {}
-            LogObservable(const LogObservable&) = delete;
-            LogObservable(LogObservable&&) = default;
-            LogObservable& operator=(const LogObservable&) = delete;
-            LogObservable& operator=(LogObservable&&) = default;
-            virtual ~LogObservable() {}
+            EventStreamObservable() {}
+            EventStreamObservable(const EventStreamObservable&) = delete;
+            EventStreamObservable(EventStreamObservable&&) = default;
+            EventStreamObservable& operator=(const EventStreamObservable&) = delete;
+            EventStreamObservable& operator=(EventStreamObservable&&) = default;
+            virtual ~EventStreamObservable() {}
     };
 
-    /// The events are read as fast as possible.
-    template <typename HandleEvent, typename HandleException, typename Expand>
-    class SpecialisedLogObservable : public virtual LogObservable, public SpecialisedObservable<HandleEvent, HandleException> {
+    /// SpecialisedEventStreamObservable represents a template-specialised Event Stream observable.
+    template <typename HandleEvent, typename HandleException>
+    class SpecialisedEventStreamObservable : public EventStreamObservable {
         public:
-            SpecialisedLogObservable(
+            SpecialisedEventStreamObservable(
                 HandleEvent handleEvent,
                 HandleException handleException,
                 std::string filename,
-                Expand expand,
-                std::string signature,
-                std::size_t eventLength,
-                LogObservable::Dispatch dispatch = LogObservable::Dispatch::synchronouslyAndSkipOffset,
-                std::function<bool()> mustRestart = []() -> bool {
-                    return false;
-                }
+                EventStreamObservable::Dispatch dispatch,
+                std::function<bool()> mustRestart,
+                std::size_t chunkSize
             ) :
-                SpecialisedObservable<HandleEvent, HandleException>(
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException)
-                ),
-                _initialExpand(expand),
-                _expand(std::forward<Expand>(expand)),
-                _log(filename),
+                _handleEvent(std::forward<HandleEvent>(handleEvent)),
+                _handleException(std::forward<HandleException>(handleException)),
+                _eventStream(filename, std::ifstream::binary),
                 _running(true),
                 _mustRestart(std::move(mustRestart))
             {
-                if (!_log.good()) {
+                if (!_eventStream.good()) {
                     throw UnreadableFile(filename);
                 }
-
-                const auto readSignature = std::string(signature);
-                _log.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                if (_log.eof() || readSignature != signature) {
-                    throw WrongSignature();
+                {
+                    const auto readSignature = std::string("Event Stream");
+                    _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
+                    if (_eventStream.eof() || readSignature != "Event Stream") {
+                        throw WrongSignature(filename);
+                    }
                 }
-
-                _loop = std::thread([this, eventLength, dispatch, signature]() -> void {
-                    auto readBytes = std::vector<unsigned char>(eventLength);
-                    auto event = Event{};
+                {
+                    const auto versionMajor = _eventStream.get();
+                    const auto versionMinor = _eventStream.get();
+                    const auto mode = _eventStream.get();
+                    if (_eventStream.eof()) {
+                        throw WrongSignature(filename);
+                    }
+                    if (versionMajor != '0' || versionMinor != '1') {
+                        throw UnsupportedVersion(filename);
+                    }
+                    if (_eventStream.eof() || mode != '0') {
+                        throw UnsupportedMode(filename);
+                    }
+                }
+                _loop = std::thread([this, dispatch, chunkSize]() -> void {
                     try {
+                        auto bytes = std::vector<uint8_t>(chunkSize);
                         switch (dispatch) {
-                            case LogObservable::Dispatch::synchronouslyAndSkipOffset: {
+                            case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
                                 auto offsetSkipped = false;
-                                auto initialTimestamp = static_cast<int64_t>(0);
                                 auto timeReference = std::chrono::system_clock::now();
-                                while (_running.load(std::memory_order_relaxed)) {
-                                    _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
-                                    if (_log.eof()) {
-                                        if (_mustRestart()) {
-                                            _log.clear();
-                                            _log.seekg(signature.length(), _log.beg);
-                                            _expand = _initialExpand;
-                                            offsetSkipped = false;
-                                            timeReference = std::chrono::system_clock::now();
-                                            continue;
-                                        } else {
-                                            throw EndOfFile();
-                                        }
-                                    }
-                                    if (_expand(readBytes, event)) {
+                                auto initialTimestamp = static_cast<uint64_t>(0);
+                                auto eventStreamStateMachine = make_eventStreamStateMachine(
+                                    [this, &offsetSkipped, &timeReference, &initialTimestamp](Event event) -> void {
                                         if (offsetSkipped) {
                                             std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
                                         } else {
@@ -352,44 +413,78 @@ namespace sepia {
                                         }
                                         this->_handleEvent(event);
                                     }
-                                }
-                            }
-                            case LogObservable::Dispatch::synchronously: {
-                                auto timeReference = std::chrono::system_clock::now();
+                                );
                                 while (_running.load(std::memory_order_relaxed)) {
-                                    _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
-                                    if (_log.eof()) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            eventStreamStateMachine(*byteIterator);
+                                        }
                                         if (_mustRestart()) {
-                                            _log.clear();
-                                            _log.seekg(signature.length(), _log.beg);
-                                            _expand = _initialExpand;
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            offsetSkipped = false;
+                                            eventStreamStateMachine.reset();
                                             timeReference = std::chrono::system_clock::now();
                                             continue;
-                                        } else {
-                                            throw EndOfFile();
                                         }
+                                        throw EndOfFile();
                                     }
-                                    if (_expand(readBytes, event)) {
+                                    for (auto&& byte : bytes) {
+                                        eventStreamStateMachine(byte);
+                                    }
+                                }
+                            }
+                            case EventStreamObservable::Dispatch::synchronously: {
+                                auto timeReference = std::chrono::system_clock::now();
+                                auto eventStreamStateMachine = make_eventStreamStateMachine(
+                                    [this, &timeReference](Event event) -> void {
                                         std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
                                         this->_handleEvent(event);
                                     }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            eventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            eventStreamStateMachine.reset();
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        eventStreamStateMachine(byte);
+                                    }
                                 }
                             }
-                            case LogObservable::Dispatch::asFastAsPossible: {
-                                while (_running.load(std::memory_order_relaxed)) {
-                                    _log.read(const_cast<char*>(reinterpret_cast<const char*>(readBytes.data())), readBytes.size());
-                                    if (_log.eof()) {
-                                        if (_mustRestart()) {
-                                            _log.clear();
-                                            _log.seekg(signature.length(), _log.beg);
-                                            _expand = _initialExpand;
-                                            continue;
-                                        } else {
-                                            throw EndOfFile();
-                                        }
-                                    }
-                                    if (_expand(readBytes, event)) {
+                            case EventStreamObservable::Dispatch::asFastAsPossible: {
+                                auto eventStreamStateMachine = make_eventStreamStateMachine(
+                                    [this](Event event) -> void {
                                         this->_handleEvent(event);
+                                    }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            eventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            eventStreamStateMachine.reset();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        eventStreamStateMachine(byte);
                                     }
                                 }
                             }
@@ -399,137 +494,45 @@ namespace sepia {
                     }
                 });
             }
-            SpecialisedLogObservable(const SpecialisedLogObservable&) = delete;
-            SpecialisedLogObservable(SpecialisedLogObservable&&) = default;
-            SpecialisedLogObservable& operator=(const SpecialisedLogObservable&) = delete;
-            SpecialisedLogObservable& operator=(SpecialisedLogObservable&&) = default;
-            virtual ~SpecialisedLogObservable() {
+            SpecialisedEventStreamObservable(const SpecialisedEventStreamObservable&) = delete;
+            SpecialisedEventStreamObservable(SpecialisedEventStreamObservable&&) = default;
+            SpecialisedEventStreamObservable& operator=(const SpecialisedEventStreamObservable&) = delete;
+            SpecialisedEventStreamObservable& operator=(SpecialisedEventStreamObservable&&) = default;
+            virtual ~SpecialisedEventStreamObservable() {
                 _running.store(false, std::memory_order_relaxed);
                 _loop.join();
             }
 
         protected:
-            Expand _initialExpand;
-            Expand _expand;
-            std::ifstream _log;
+            HandleEvent _handleEvent;
+            HandleException _handleException;
+            std::ifstream _eventStream;
             std::atomic_bool _running;
             std::thread _loop;
             std::function<bool()> _mustRestart;
     };
 
-    /// CircularFifo is a thread-safe circular container.
-    /// It is used to create a buffer stored on the computer's memory, which can therefore be larger than the camera's one.
-    class CircularFifo {
-        public:
-            CircularFifo(std::size_t size) :
-                _size(size),
-                _head(0),
-                _tail(0)
-            {
-                _events.resize(_size);
-            }
-            CircularFifo(const CircularFifo&) = delete;
-            CircularFifo(CircularFifo&&) = default;
-            CircularFifo& operator=(const CircularFifo&) = delete;
-            CircularFifo& operator=(CircularFifo&&) = default;
-            virtual ~CircularFifo() {}
-
-            /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
-            /// If the event could not be inserted (FIFO full), false is returned.
-            virtual bool push(Event event) {
-                const auto currentTail = _tail.load(std::memory_order_relaxed);
-                const auto nextTail = increment(currentTail);
-                if (nextTail != _head.load(std::memory_order_acquire)) {
-                    _events[currentTail] = event;
-                    _tail.store(nextTail, std::memory_order_release);
-                    return true;
-                }
-                return false;
-            }
-
-            /// pop remove an event from the circular FIFO in a thread-safe manner, as long as one thread only is reading.
-            /// If the event could not be retrieved (FIFO empty), false is returned.
-            virtual bool pop(Event& event) {
-                const auto currentHead = _head.load(std::memory_order_relaxed);
-                if (currentHead == _tail.load(std::memory_order_acquire)) {
-                    return false;
-                }
-                event = _events[currentHead];
-                _head.store(increment(currentHead), std::memory_order_release);
-                return true;
-            }
-
-        protected:
-            /// increment returns the FIFO next index.
-            std::size_t increment(const std::size_t& index) const {
-                return (index + 1) % _size;
-            }
-
-            std::size_t _size;
-            std::atomic<std::size_t> _head;
-            std::atomic<std::size_t> _tail;
-            std::vector<Event> _events;
-    };
-
-    /// Camera represents a generic event-based camera.
-    class Camera : public virtual Observable {
-        public:
-            Camera() : Observable() {}
-            Camera(const Camera&) = delete;
-            Camera(Camera&&) = default;
-            Camera& operator=(const Camera&) = delete;
-            Camera& operator=(Camera&&) = default;
-            virtual ~Camera() {}
-    };
-
-    /// SpecialisedCamera represents a template-specialised generic event-based camera.
-    template <typename HandleEvent, typename HandleException>
-    class SpecialisedCamera : public virtual Camera, public SpecialisedObservable<HandleEvent, HandleException>, public CircularFifo {
-        public:
-            SpecialisedCamera(
-                HandleEvent handleEvent,
-                HandleException handleException,
-                std::size_t fifoSize = 1 << 24,
-                std::chrono::milliseconds sleepDuration = std::chrono::milliseconds(10)
-            ) :
-                Camera(),
-                SpecialisedObservable<HandleEvent, HandleException>(
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException)
-                ),
-                CircularFifo(fifoSize),
-                _bufferRunning(true),
-                _sleepDuration(sleepDuration)
-            {
-                _bufferLoop = std::thread([this]() -> void {
-                    try {
-                        auto event = Event{};
-                        while (_bufferRunning.load(std::memory_order_relaxed)) {
-                            if (pop(event)) {
-                                this->_handleEvent(event);
-                            } else {
-                                std::this_thread::sleep_for(_sleepDuration);
-                            }
-                        }
-                    } catch (...) {
-                        this->_handleException(std::current_exception());
-                    }
-                });
-            }
-            SpecialisedCamera(const SpecialisedCamera&) = delete;
-            SpecialisedCamera(SpecialisedCamera&&) = default;
-            SpecialisedCamera& operator=(const SpecialisedCamera&) = delete;
-            SpecialisedCamera& operator=(SpecialisedCamera&&) = default;
-            virtual ~SpecialisedCamera() {
-                _bufferRunning.store(false, std::memory_order_relaxed);
-                _bufferLoop.join();
-            }
-
-        protected:
-            std::thread _bufferLoop;
-            std::atomic_bool _bufferRunning;
-            std::chrono::milliseconds _sleepDuration;
-    };
+    /// make_eventStreamObservable creates an event stream observable from functors.
+    template<typename HandleEvent, typename HandleException>
+    std::unique_ptr<SpecialisedEventStreamObservable<HandleEvent, HandleException>> make_eventStreamObservable(
+        HandleEvent handleEvent,
+        HandleException handleException,
+        std::string filename,
+        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
+        std::function<bool()> mustRestart = []() -> bool {
+            return false;
+        },
+        std::size_t chunkSize = 1 << 10
+    ) {
+        return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
+            std::forward<HandleEvent>(handleEvent),
+            std::forward<HandleException>(handleException),
+            std::move(filename),
+            dispatch,
+            std::move(mustRestart),
+            chunkSize
+        );
+    }
 
     /// Forward-declare parameter for referencing in UnvalidatedParameter.
     class Parameter;
@@ -620,6 +623,7 @@ namespace sepia {
             virtual void load(const Parameter& parameter) = 0;
 
         protected:
+
             /// trim removes white space and line break characters.
             static const std::string::const_iterator trim(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& lineCount) {
                 auto trimIterator = begin;
@@ -917,6 +921,7 @@ namespace sepia {
             }
 
         protected:
+
             /// ListExpecting describes the next character expected by the parser.
             enum class ListExpecting {
                 whitespace,
@@ -1036,6 +1041,7 @@ namespace sepia {
             }
 
         protected:
+
             /// validate determines if the number is valid regarding the given constraints.
             void validate() {
                 if (std::isnan(_value)) {
@@ -1260,5 +1266,74 @@ namespace sepia {
             bool _isString;
             std::string _jsonData;
             std::unique_ptr<Parameter> _parameter;
+    };
+
+    /// SpecialisedCamera represents a template-specialised generic event-based camera.
+    template <typename HandleEvent, typename HandleException>
+    class SpecialisedCamera {
+        public:
+            SpecialisedCamera(
+                HandleEvent handleEvent,
+                HandleException handleException,
+                std::size_t fifoSize,
+                std::chrono::milliseconds sleepDuration
+            ) :
+                _handleEvent(std::forward<HandleEvent>(handleEvent)),
+                _handleException(std::forward<HandleException>(handleException)),
+                _bufferRunning(true),
+                _sleepDuration(sleepDuration),
+                _head(0),
+                _tail(0)
+            {
+                _events.resize(fifoSize);
+                _bufferLoop = std::thread([this]() -> void {
+                    try {
+                        auto event = Event{};
+                        while (_bufferRunning.load(std::memory_order_relaxed)) {
+                            const auto currentHead = _head.load(std::memory_order_relaxed);
+                            if (currentHead == _tail.load(std::memory_order_acquire)) {
+                                std::this_thread::sleep_for(_sleepDuration);
+                            } else {
+                                event = _events[currentHead];
+                                _head.store((currentHead + 1) % _events.size(), std::memory_order_release);
+                                this->_handleEvent(event);
+                            }
+                        }
+                    } catch (...) {
+                        this->_handleException(std::current_exception());
+                    }
+                });
+            }
+            SpecialisedCamera(const SpecialisedCamera&) = delete;
+            SpecialisedCamera(SpecialisedCamera&&) = default;
+            SpecialisedCamera& operator=(const SpecialisedCamera&) = delete;
+            SpecialisedCamera& operator=(SpecialisedCamera&&) = default;
+            virtual ~SpecialisedCamera() {
+                _bufferRunning.store(false, std::memory_order_relaxed);
+                _bufferLoop.join();
+            }
+
+            /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
+            /// If the event could not be inserted (FIFO full), false is returned.
+            virtual bool push(Event event) {
+                const auto currentTail = _tail.load(std::memory_order_relaxed);
+                const auto nextTail = (currentTail + 1) % _events.size();
+                if (nextTail != _head.load(std::memory_order_acquire)) {
+                    _events[currentTail] = event;
+                    _tail.store(nextTail, std::memory_order_release);
+                    return true;
+                }
+                return false;
+            }
+
+        protected:
+            HandleEvent _handleEvent;
+            HandleException _handleException;
+            std::thread _bufferLoop;
+            std::atomic_bool _bufferRunning;
+            std::chrono::milliseconds _sleepDuration;
+            std::atomic<std::size_t> _head;
+            std::atomic<std::size_t> _tail;
+            std::vector<Event> _events;
     };
 }
