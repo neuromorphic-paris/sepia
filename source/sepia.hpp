@@ -241,7 +241,6 @@ namespace sepia {
                 idle,
                 byte0,
                 byte1,
-                byte2,
             };
 
             HandleEvent _handleEvent;
