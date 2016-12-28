@@ -10,52 +10,6 @@
 /// In order to use this header, an application must link to the dynamic library opalkellyfrontpanel.
 namespace opalKellyAtisSepia {
 
-    /// Compress turns a sepia::Event stream into an unsigned char stream.
-    class Compress {
-        public:
-            Compress(int64_t timestampOffset = 0) :
-                _timestampOffset(timestampOffset)
-            {
-            }
-            Compress(const Compress&) = default;
-            Compress(Compress&&) = default;
-            Compress& operator=(const Compress&) = default;
-            Compress& operator=(Compress&&) = default;
-            virtual ~Compress() {}
-
-            /// operator() handles an event.
-            virtual std::vector<unsigned char> operator()(sepia::Event event) {
-                auto reducedTimestamp = event.timestamp - _timestampOffset;
-                auto bytes = std::vector<unsigned char>();
-                bytes.reserve(4);
-                if (reducedTimestamp >= 0x2000) {
-                    const auto offsetOverflow = static_cast<std::size_t>(reducedTimestamp / 0x2000);
-                    reducedTimestamp -= offsetOverflow * 0x2000;
-                    bytes.reserve(4 * (offsetOverflow + 1));
-                    for (auto index = static_cast<std::size_t>(0); index < offsetOverflow; ++index) {
-                        bytes.push_back(0x55);
-                        bytes.push_back(0x35);
-                        bytes.push_back(0x31);
-                        bytes.push_back(0xf0);
-                    }
-                    _timestampOffset += offsetOverflow * 0x2000;
-                }
-                bytes.push_back(static_cast<unsigned char>(reducedTimestamp & 0xff));
-                bytes.push_back(static_cast<unsigned char>(
-                    ((reducedTimestamp & 0x1f00) >> 8)
-                    | (event.isThresholdCrossing ? 0x40 : 0x00)
-                    | (event.polarity ? 0x80 : 0x00)
-                    | ((event.x & 0x100) >> 3)
-                ));
-                bytes.push_back(static_cast<unsigned char>(event.x & 0xff));
-                bytes.push_back(static_cast<unsigned char>(event.y));
-                return bytes;
-            }
-
-        protected:
-            int64_t _timestampOffset;
-    };
-
     /// Expand turns an unsigned char stream into a sepia::Event stream.
     class Expand {
         public:
@@ -70,110 +24,14 @@ namespace opalKellyAtisSepia {
             virtual ~Expand() {}
 
             /// operator() handles unsigned chars.
-            virtual bool operator()(std::vector<unsigned char> bytes, sepia::Event& event) {
-                if (bytes[3] < 240) {
-                    event.y = static_cast<uint16_t>(bytes[3]);
-                    event.x = ((static_cast<uint16_t>(bytes[1] & 0x20) << 3) | bytes[2]);
-                    if (event.x < 304) {
-                        event.timestamp = _timestampOffset + ((static_cast<int64_t>(bytes[1] & 0x1f) << 8) | bytes[0]);
-                        event.isThresholdCrossing = (((bytes[1] & 0x40) >> 6) == 0x01);
-                        event.polarity = (((bytes[1] & 0x80) >> 7) == 0x01);
-                        return true;
-                    }
-                } else if (
-                    bytes[3] == 240
-                    && ((static_cast<uint16_t>(bytes[1] & 0x20) << 3) | bytes[2]) == 305
-                    && ((static_cast<int64_t>(bytes[1] & 0x1f) << 8) | bytes[0]) == 0x1555
-                ) {
-                    _timestampOffset += 0x2000;
-                }
-                return false;
-            }
+
 
         protected:
             int64_t _timestampOffset;
     };
 
-    /// Log is a simplified sepia::Log constructor to use with the Opal Kelly Atis.
-    class Log : public sepia::Log<Compress> {
-        public:
-
-            /// siganture is a string identifying the file type.
-            static std::string signature() {
-                return "opalKellyAtis";
-            }
-
-            Log(Compress compress = Compress()) :
-                sepia::Log<Compress>(std::move(compress))
-            {
-            }
-            Log(const Log&) = delete;
-            Log(Log&&) = default;
-            Log& operator=(const Log&) = delete;
-            Log& operator=(Log&&) = default;
-            virtual ~Log() {}
-            virtual std::string getSignature() const override {
-                return signature();
-            }
-    };
-
-    /// SpecialisedLogObservable is a simplified sepia::SpecialisedLogObservable constructor to use with the Opal Kelly Atis.
-    template <typename HandleEvent, typename HandleException>
-    class SpecialisedLogObservable : public sepia::SpecialisedLogObservable<HandleEvent, HandleException, Expand> {
-        public:
-            SpecialisedLogObservable(
-                HandleEvent handleEvent,
-                HandleException handleException,
-                std::string filename,
-                sepia::LogObservable::Dispatch dispatch = sepia::LogObservable::Dispatch::synchronouslyAndSkipOffset,
-                std::function<bool()> mustRestart = []() -> bool {
-                    return false;
-                },
-                Expand expand = Expand()
-            ) :
-                sepia::SpecialisedLogObservable<HandleEvent, HandleException, Expand>(
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException),
-                    filename,
-                    std::move(expand),
-                    Log::signature(),
-                    4,
-                    dispatch,
-                    std::move(mustRestart)
-                )
-            {
-            }
-            SpecialisedLogObservable(const SpecialisedLogObservable&) = delete;
-            SpecialisedLogObservable(SpecialisedLogObservable&&) = default;
-            SpecialisedLogObservable& operator=(const SpecialisedLogObservable&) = delete;
-            SpecialisedLogObservable& operator=(SpecialisedLogObservable&&) = default;
-            virtual ~SpecialisedLogObservable() {}
-    };
-
-    /// make_logObservable creates a log observable from functors.
-    template<typename HandleEvent, typename HandleException>
-    std::unique_ptr<SpecialisedLogObservable<HandleEvent, HandleException>> make_logObservable(
-        HandleEvent handleEvent,
-        HandleException handleException,
-        std::string filename,
-        sepia::LogObservable::Dispatch dispatch = sepia::LogObservable::Dispatch::synchronouslyAndSkipOffset,
-        std::function<bool()> mustRestart = []() -> bool {
-            return false;
-        },
-        Expand expand = Expand()
-    ) {
-        return sepia::make_unique<SpecialisedLogObservable<HandleEvent, HandleException>>(
-            std::forward<HandleEvent>(handleEvent),
-            std::forward<HandleException>(handleException),
-            std::move(filename),
-            dispatch,
-            std::move(mustRestart),
-            std::move(expand)
-        );
-    }
-
     /// Camera represents an ATIS connected to an Opal Kelly board.
-    class Camera : public virtual sepia::Camera {
+    class Camera {
         public:
             /// availableSerials returns a set of ports in which an Opal Kelly ATIS is connected.
             static std::unordered_set<std::string> availableSerials() {
@@ -303,7 +161,7 @@ namespace opalKellyAtisSepia {
                 });
             }
 
-            Camera() : sepia::Camera() {}
+            Camera() {}
             Camera(const Camera&) = delete;
             Camera(Camera&&) = default;
             Camera& operator=(const Camera&) = delete;
@@ -317,27 +175,25 @@ namespace opalKellyAtisSepia {
 
     /// SpecialisedCamera represents a template-specialised ATIS connected to an Opal Kelly board.
     template <typename HandleEvent, typename HandleException>
-    class SpecialisedCamera : public virtual Camera, public sepia::SpecialisedCamera<HandleEvent, HandleException> {
+    class SpecialisedCamera : public Camera, public sepia::SpecialisedCamera<HandleEvent, HandleException> {
         public:
             SpecialisedCamera<HandleEvent, HandleException>(
                 HandleEvent handleEvent,
                 HandleException handleException,
-                std::unique_ptr<sepia::UnvalidatedParameter> unvalidatedParameter = sepia::make_unique<sepia::UnvalidatedParameter>(std::string()),
-                std::size_t fifoSize = 1 << 24,
-                std::string serial = std::string(),
-                std::chrono::milliseconds sleepDuration = std::chrono::milliseconds(10),
-                Expand expand = Expand()
+                std::unique_ptr<sepia::UnvalidatedParameter> unvalidatedParameter,
+                std::size_t fifoSize,
+                std::string serial,
+                std::chrono::milliseconds sleepDuration
             ) :
-                Camera(),
                 sepia::SpecialisedCamera<HandleEvent, HandleException>(
                     std::forward<HandleEvent>(handleEvent),
                     std::forward<HandleException>(handleException),
                     fifoSize,
                     sleepDuration
                 ),
-                _expand(std::move(expand)),
                 _parameter(defaultParameter()),
-                _acquisitionRunning(true)
+                _acquisitionRunning(true),
+                _timestampOffset(0)
             {
                 if (unvalidatedParameter->isString()) {
                     _parameter->load(unvalidatedParameter->jsonData());
@@ -572,15 +428,27 @@ namespace opalKellyAtisSepia {
                                 }
                             } else if (numberOfEvents > 0) {
                                 _opalKellyFrontPanel.ReadFromPipeOut(0xa0, numberOfEvents * 4, eventsData.data());
-
                                 for (auto eventIndex = static_cast<unsigned long>(0); eventIndex < numberOfEvents; ++eventIndex) {
                                     const auto eventsDataIterator = eventsData.begin() + 4 * eventIndex;
                                     eventBytes.assign(eventsDataIterator, eventsDataIterator + 4);
-                                    if (_expand(eventBytes, event)) {
-                                        event.y = 239 - event.y;
-                                        if (!this->push(event)) {
-                                            throw std::runtime_error("Computer's FIFO overflow");
+                                    if (eventBytes[3] < 240) {
+                                        event.y = static_cast<uint16_t>(eventBytes[3]);
+                                        event.x = ((static_cast<uint16_t>(eventBytes[1] & 0x20) << 3) | eventBytes[2]);
+                                        if (event.x < 304) {
+                                            event.timestamp = _timestampOffset + ((static_cast<int64_t>(eventBytes[1] & 0x1f) << 8) | eventBytes[0]);
+                                            event.isThresholdCrossing = (((eventBytes[1] & 0x40) >> 6) == 0x01);
+                                            event.polarity = (((eventBytes[1] & 0x80) >> 7) == 0x01);
+                                            event.y = 239 - event.y;
+                                            if (!this->push(event)) {
+                                                throw std::runtime_error("Computer's FIFO overflow");
+                                            }
                                         }
+                                    } else if (
+                                        eventBytes[3] == 240
+                                        && ((static_cast<uint16_t>(eventBytes[1] & 0x20) << 3) | eventBytes[2]) == 305
+                                        && ((static_cast<int64_t>(eventBytes[1] & 0x1f) << 8) | eventBytes[0]) == 0x1555
+                                    ) {
+                                        _timestampOffset += 0x2000;
                                     }
                                 }
                             } else {
@@ -611,11 +479,11 @@ namespace opalKellyAtisSepia {
             }
 
         protected:
-            Expand _expand;
             std::unique_ptr<sepia::Parameter> _parameter;
             std::atomic_bool _acquisitionRunning;
             OpalKellyLegacy::okCFrontPanel _opalKellyFrontPanel;
             std::thread _acquisitionLoop;
+            uint64_t _timestampOffset;
     };
 
     /// make_camera creates a camera from functors.
@@ -635,8 +503,7 @@ namespace opalKellyAtisSepia {
             std::move(unvalidatedParameter),
             fifoSize,
             serial,
-            sleepDuration,
-            std::move(expand)
+            sleepDuration
         );
     }
 }
