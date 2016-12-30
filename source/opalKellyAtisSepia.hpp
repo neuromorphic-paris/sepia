@@ -175,7 +175,7 @@ namespace opalKellyAtisSepia {
 
     /// SpecialisedCamera represents a template-specialised ATIS connected to an Opal Kelly board.
     template <typename HandleEvent, typename HandleException>
-    class SpecialisedCamera : public Camera, public sepia::SpecialisedCamera<HandleEvent, HandleException> {
+    class SpecialisedCamera : public Camera, public sepia::SpecialisedCamera<sepia::Event, HandleEvent, HandleException> {
         public:
             SpecialisedCamera<HandleEvent, HandleException>(
                 HandleEvent handleEvent,
@@ -185,7 +185,7 @@ namespace opalKellyAtisSepia {
                 std::string serial,
                 std::chrono::milliseconds sleepDuration
             ) :
-                sepia::SpecialisedCamera<HandleEvent, HandleException>(
+                sepia::SpecialisedCamera<sepia::Event, HandleEvent, HandleException>(
                     std::forward<HandleEvent>(handleEvent),
                     std::forward<HandleException>(handleException),
                     fifoSize,

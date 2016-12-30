@@ -80,6 +80,30 @@ namespace sepia {
         bool isSecond;
     };
 
+    /// ColorEvent represents the parameters of a color event.
+    struct ColorEvent {
+
+        /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
+        /// x is 0 on the left, and increases from left to right.
+        uint16_t x;
+
+        /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
+        /// y is 0 on the bottom, and increases bottom to top.
+        uint16_t y;
+
+        /// timestamp represents the event's timestamp.
+        uint64_t timestamp;
+
+        /// r represents the red component of the color.
+        uint8_t r;
+
+        /// g represents the green component of the color.
+        uint8_t g;
+
+        /// b represents the blue component of the color.
+        uint8_t b;
+    };
+
     /// UnreadableFile is thrown when an input file does not exist or is not readable.
     class UnreadableFile : public std::runtime_error {
         public:
@@ -181,80 +205,6 @@ namespace sepia {
         );
     }
 
-    /// EventStreamStateMachine implements the event stream state machine for use in more high-level components.
-    template <typename HandleEvent>
-    class EventStreamStateMachine {
-        public:
-            EventStreamStateMachine(HandleEvent handleEvent) :
-                _handleEvent(std::forward<HandleEvent>(handleEvent)),
-                _previousTimestamp(0),
-                _state(State::idle)
-            {
-            }
-            EventStreamStateMachine(const EventStreamStateMachine&) = default;
-            EventStreamStateMachine(EventStreamStateMachine&&) = default;
-            EventStreamStateMachine& operator=(const EventStreamStateMachine&) = default;
-            EventStreamStateMachine& operator=(EventStreamStateMachine&&) = default;
-            virtual ~EventStreamStateMachine() {}
-
-            /// operator() handles a byte.
-            virtual void operator()(uint8_t byte) {
-                switch (_state) {
-                    case State::idle: {
-                        if ((byte & 0b11111) == 0b11111) {
-                            _previousTimestamp += ((byte & 0b11100000) >> 5) * 31;
-                        } else {
-                            _event.timestamp = _previousTimestamp + (byte & 0b11111);
-                            _previousTimestamp = _event.timestamp;
-                            _event.x = ((byte & 0b11100000) >> 5);
-                            _state = State::byte0;
-                        }
-                        break;
-                    }
-                    case State::byte0: {
-                        _event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
-                        _event.y = ((byte & 0b11000000) >> 6);
-                        _state = State::byte1;
-                        break;
-                    }
-                    case State::byte1: {
-                        _event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
-                        _event.isThresholdCrossing = (((byte & 0b1000000) >> 6) == 1);
-                        _event.polarity = (((byte & 0b10000000) >> 7) == 1);
-                        _handleEvent(_event);
-                        _state = State::idle;
-                        break;
-                    }
-                }
-            }
-
-            /// reset initialises the state machine.
-            virtual void reset() {
-                _previousTimestamp = 0;
-                _state = State::idle;
-            }
-
-        protected:
-
-            /// State represents the current state machine's state.
-            enum class State {
-                idle,
-                byte0,
-                byte1,
-            };
-
-            HandleEvent _handleEvent;
-            uint64_t _previousTimestamp;
-            State _state;
-            Event _event;
-    };
-
-    /// make_eventStreamStateMachine creates a log observable from functors.
-    template<typename HandleEvent>
-    EventStreamStateMachine<HandleEvent> make_eventStreamStateMachine(HandleEvent handleEvent) {
-        return EventStreamStateMachine<HandleEvent>(std::forward<HandleEvent>(handleEvent));
-    }
-
     /// EventStreamWriter writes events to an Event Stream file.
     class EventStreamWriter {
         public:
@@ -333,6 +283,81 @@ namespace sepia {
             std::atomic_flag _accessingEventStream;
             uint64_t _previousTimestamp;
     };
+
+
+    /// EventStreamStateMachine implements the event stream state machine for use in more high-level components.
+    template <typename HandleEvent>
+    class EventStreamStateMachine {
+        public:
+            EventStreamStateMachine(HandleEvent handleEvent) :
+                _handleEvent(std::forward<HandleEvent>(handleEvent)),
+                _previousTimestamp(0),
+                _state(State::idle)
+            {
+            }
+            EventStreamStateMachine(const EventStreamStateMachine&) = default;
+            EventStreamStateMachine(EventStreamStateMachine&&) = default;
+            EventStreamStateMachine& operator=(const EventStreamStateMachine&) = default;
+            EventStreamStateMachine& operator=(EventStreamStateMachine&&) = default;
+            virtual ~EventStreamStateMachine() {}
+
+            /// operator() handles a byte.
+            virtual void operator()(uint8_t byte) {
+                switch (_state) {
+                    case State::idle: {
+                        if ((byte & 0b11111) == 0b11111) {
+                            _previousTimestamp += ((byte & 0b11100000) >> 5) * 31;
+                        } else {
+                            _event.timestamp = _previousTimestamp + (byte & 0b11111);
+                            _previousTimestamp = _event.timestamp;
+                            _event.x = ((byte & 0b11100000) >> 5);
+                            _state = State::byte0;
+                        }
+                        break;
+                    }
+                    case State::byte0: {
+                        _event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
+                        _event.y = ((byte & 0b11000000) >> 6);
+                        _state = State::byte1;
+                        break;
+                    }
+                    case State::byte1: {
+                        _event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
+                        _event.isThresholdCrossing = (((byte & 0b1000000) >> 6) == 1);
+                        _event.polarity = (((byte & 0b10000000) >> 7) == 1);
+                        _handleEvent(_event);
+                        _state = State::idle;
+                        break;
+                    }
+                }
+            }
+
+            /// reset initialises the state machine.
+            virtual void reset() {
+                _previousTimestamp = 0;
+                _state = State::idle;
+            }
+
+        protected:
+
+            /// State represents the current state machine's state.
+            enum class State {
+                idle,
+                byte0,
+                byte1,
+            };
+
+            HandleEvent _handleEvent;
+            uint64_t _previousTimestamp;
+            State _state;
+            Event _event;
+    };
+
+    /// make_eventStreamStateMachine creates an event stream state machine from functors.
+    template<typename HandleEvent>
+    EventStreamStateMachine<HandleEvent> make_eventStreamStateMachine(HandleEvent handleEvent) {
+        return EventStreamStateMachine<HandleEvent>(std::forward<HandleEvent>(handleEvent));
+    }
 
     /// EventStreamObservable dispatches events from an event stream file.
     class EventStreamObservable {
@@ -525,6 +550,350 @@ namespace sepia {
         std::size_t chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
+            std::forward<HandleEvent>(handleEvent),
+            std::forward<HandleException>(handleException),
+            std::move(filename),
+            dispatch,
+            std::move(mustRestart),
+            chunkSize
+        );
+    }
+
+    /// ColorEventStreamWriter writes events to a color Event Stream file.
+    class ColorEventStreamWriter {
+        public:
+            ColorEventStreamWriter():
+                _logging(false),
+                _previousTimestamp(0)
+            {
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+            ColorEventStreamWriter(const ColorEventStreamWriter&) = delete;
+            ColorEventStreamWriter(ColorEventStreamWriter&&) = default;
+            ColorEventStreamWriter& operator=(const ColorEventStreamWriter&) = delete;
+            ColorEventStreamWriter& operator=(ColorEventStreamWriter&&) = default;
+            virtual ~ColorEventStreamWriter() {}
+
+            /// operator() handles an event.
+            virtual void operator()(ColorEvent colorEvent) {
+                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
+                if (_logging) {
+                    auto relativeTimestamp = colorEvent.timestamp - _previousTimestamp;
+                    if (relativeTimestamp > 126) {
+                        const auto numberOfOverflows = relativeTimestamp / 127;
+                        for (auto index = static_cast<std::size_t>(0); index < numberOfOverflows; ++index) {
+                            _eventStream.put(static_cast<uint8_t>(0b11111111));
+                        }
+                        relativeTimestamp -= numberOfOverflows * 127;
+                    }
+                    _eventStream.put(static_cast<uint8_t>(relativeTimestamp) | static_cast<uint8_t>((colorEvent.x & 0b1) << 7));
+                    _eventStream.put(static_cast<uint8_t>((colorEvent.x & 0b111111110) >> 1));
+                    _eventStream.put(static_cast<uint8_t>(colorEvent.y));
+                    _eventStream.put(colorEvent.r);
+                    _eventStream.put(colorEvent.g);
+                    _eventStream.put(colorEvent.b);
+                    _previousTimestamp = colorEvent.timestamp;
+                }
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+
+            /// open is a thread-safe method to start logging events to the given file.
+            virtual void open(std::string filename) {
+                _eventStream.open(filename, std::ifstream::binary);
+                if (!_eventStream.good()) {
+                    throw UnwritableFile(filename);
+                }
+                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
+                if (_logging) {
+                    _accessingEventStream.clear(std::memory_order_release);
+                    throw std::runtime_error("Already logging");
+                }
+                _eventStream.write("Event Stream012", 15);
+                _logging = true;
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+
+            /// close is a thread-safe method to stop logging the events and close the file.
+            virtual void close() {
+                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
+                if (!_logging) {
+                    _accessingEventStream.clear(std::memory_order_release);
+                    throw std::runtime_error("Was not logging");
+                }
+                _logging = false;
+                _eventStream.close();
+                _previousTimestamp = 0;
+                _accessingEventStream.clear(std::memory_order_release);
+            }
+
+        protected:
+            std::ofstream _eventStream;
+            bool _logging;
+            std::atomic_flag _accessingEventStream;
+            uint64_t _previousTimestamp;
+    };
+
+    /// ColorEventStreamStateMachine implements the event stream state machine for use in more high-level components.
+    template <typename HandleEvent>
+    class ColorEventStreamStateMachine {
+        public:
+            ColorEventStreamStateMachine(HandleEvent handleEvent) :
+                _handleEvent(std::forward<HandleEvent>(handleEvent)),
+                _previousTimestamp(0),
+                _state(State::idle)
+            {
+            }
+            ColorEventStreamStateMachine(const ColorEventStreamStateMachine&) = default;
+            ColorEventStreamStateMachine(ColorEventStreamStateMachine&&) = default;
+            ColorEventStreamStateMachine& operator=(const ColorEventStreamStateMachine&) = default;
+            ColorEventStreamStateMachine& operator=(ColorEventStreamStateMachine&&) = default;
+            virtual ~ColorEventStreamStateMachine() {}
+
+            /// operator() handles a byte.
+            virtual void operator()(uint8_t byte) {
+                switch (_state) {
+                    case State::idle: {
+                        if ((byte & 0b1111111) == 0b1111111) {
+                            _previousTimestamp += ((byte & 0b10000000) >> 7) * 127;
+                        } else {
+                            _colorEvent.timestamp = _previousTimestamp + (byte & 0b1111111);
+                            _previousTimestamp = _colorEvent.timestamp;
+                            _colorEvent.x = ((byte & 0b10000000) >> 7);
+                            _state = State::byte0;
+                        }
+                        break;
+                    }
+                    case State::byte0: {
+                        _colorEvent.x |= (static_cast<uint16_t>(byte) << 1);
+                        _state = State::byte1;
+                        break;
+                    }
+                    case State::byte1: {
+                        _colorEvent.y = byte;
+                        _state = State::byte2;
+                        break;
+                    }
+                    case State::byte2: {
+                        _colorEvent.r = byte;
+                        _state = State::byte3;
+                        break;
+                    }
+                    case State::byte3: {
+                        _colorEvent.g = byte;
+                        _state = State::byte4;
+                        break;
+                    }
+                    case State::byte4: {
+                        _colorEvent.b = byte;
+                        _handleEvent(_colorEvent);
+                        _state = State::idle;
+                        break;
+                    }
+                }
+            }
+
+            /// reset initialises the state machine.
+            virtual void reset() {
+                _previousTimestamp = 0;
+                _state = State::idle;
+            }
+
+        protected:
+
+            /// State represents the current state machine's state.
+            enum class State {
+                idle,
+                byte0,
+                byte1,
+                byte2,
+                byte3,
+                byte4,
+            };
+
+            HandleEvent _handleEvent;
+            uint64_t _previousTimestamp;
+            State _state;
+            ColorEvent _colorEvent;
+    };
+
+    /// make_colorEventStreamStateMachine creates a color event stream state machine from functors.
+    template<typename HandleEvent>
+    ColorEventStreamStateMachine<HandleEvent> make_colorEventStreamStateMachine(HandleEvent handleEvent) {
+        return ColorEventStreamStateMachine<HandleEvent>(std::forward<HandleEvent>(handleEvent));
+    }
+
+    /// SpecialisedColorEventStreamObservable represents a template-specialised Event Stream observable.
+    template <typename HandleEvent, typename HandleException>
+    class SpecialisedColorEventStreamObservable : public EventStreamObservable {
+        public:
+            SpecialisedColorEventStreamObservable(
+                HandleEvent handleEvent,
+                HandleException handleException,
+                std::string filename,
+                EventStreamObservable::Dispatch dispatch,
+                std::function<bool()> mustRestart,
+                std::size_t chunkSize
+            ) :
+                _handleEvent(std::forward<HandleEvent>(handleEvent)),
+                _handleException(std::forward<HandleException>(handleException)),
+                _eventStream(filename, std::ifstream::binary),
+                _running(true),
+                _mustRestart(std::move(mustRestart))
+            {
+                if (!_eventStream.good()) {
+                    throw UnreadableFile(filename);
+                }
+                {
+                    const auto readSignature = std::string("Event Stream");
+                    _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
+                    if (_eventStream.eof() || readSignature != "Event Stream") {
+                        throw WrongSignature(filename);
+                    }
+                }
+                {
+                    const auto versionMajor = _eventStream.get();
+                    const auto versionMinor = _eventStream.get();
+                    const auto mode = _eventStream.get();
+                    if (_eventStream.eof()) {
+                        throw WrongSignature(filename);
+                    }
+                    if (versionMajor != '0' || versionMinor != '1') {
+                        throw UnsupportedVersion(filename);
+                    }
+                    if (_eventStream.eof() || mode != '2') {
+                        throw UnsupportedMode(filename);
+                    }
+                }
+                _loop = std::thread([this, dispatch, chunkSize]() -> void {
+                    try {
+                        auto bytes = std::vector<uint8_t>(chunkSize);
+                        switch (dispatch) {
+                            case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
+                                auto offsetSkipped = false;
+                                auto timeReference = std::chrono::system_clock::now();
+                                auto initialTimestamp = static_cast<uint64_t>(0);
+                                auto colorEventStreamStateMachine = make_colorEventStreamStateMachine(
+                                    [this, &offsetSkipped, &timeReference, &initialTimestamp](ColorEvent colorEvent) -> void {
+                                        if (offsetSkipped) {
+                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(colorEvent.timestamp - initialTimestamp));
+                                        } else {
+                                            offsetSkipped = true;
+                                            initialTimestamp = colorEvent.timestamp;
+                                        }
+                                        this->_handleEvent(colorEvent);
+                                    }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            colorEventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            offsetSkipped = false;
+                                            colorEventStreamStateMachine.reset();
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        colorEventStreamStateMachine(byte);
+                                    }
+                                }
+                            }
+                            case EventStreamObservable::Dispatch::synchronously: {
+                                auto timeReference = std::chrono::system_clock::now();
+                                auto colorEventStreamStateMachine = make_colorEventStreamStateMachine(
+                                    [this, &timeReference](ColorEvent colorEvent) -> void {
+                                        std::this_thread::sleep_until(timeReference + std::chrono::microseconds(colorEvent.timestamp));
+                                        this->_handleEvent(colorEvent);
+                                    }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            colorEventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            colorEventStreamStateMachine.reset();
+                                            timeReference = std::chrono::system_clock::now();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        colorEventStreamStateMachine(byte);
+                                    }
+                                }
+                            }
+                            case EventStreamObservable::Dispatch::asFastAsPossible: {
+                                auto colorEventStreamStateMachine = make_colorEventStreamStateMachine(
+                                    [this](ColorEvent colorEvent) -> void {
+                                        this->_handleEvent(colorEvent);
+                                    }
+                                );
+                                while (_running.load(std::memory_order_relaxed)) {
+                                    _eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                    if (_eventStream.eof()) {
+                                        for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), _eventStream.gcount()); ++byteIterator) {
+                                            colorEventStreamStateMachine(*byteIterator);
+                                        }
+                                        if (_mustRestart()) {
+                                            _eventStream.clear();
+                                            _eventStream.seekg(15);
+                                            colorEventStreamStateMachine.reset();
+                                            continue;
+                                        }
+                                        throw EndOfFile();
+                                    }
+                                    for (auto&& byte : bytes) {
+                                        colorEventStreamStateMachine(byte);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (...) {
+                        this->_handleException(std::current_exception());
+                    }
+                });
+            }
+            SpecialisedColorEventStreamObservable(const SpecialisedColorEventStreamObservable&) = delete;
+            SpecialisedColorEventStreamObservable(SpecialisedColorEventStreamObservable&&) = default;
+            SpecialisedColorEventStreamObservable& operator=(const SpecialisedColorEventStreamObservable&) = delete;
+            SpecialisedColorEventStreamObservable& operator=(SpecialisedColorEventStreamObservable&&) = default;
+            virtual ~SpecialisedColorEventStreamObservable() {
+                _running.store(false, std::memory_order_relaxed);
+                _loop.join();
+            }
+
+        protected:
+            HandleEvent _handleEvent;
+            HandleException _handleException;
+            std::ifstream _eventStream;
+            std::atomic_bool _running;
+            std::thread _loop;
+            std::function<bool()> _mustRestart;
+    };
+
+    /// make_colorEventStreamObservable creates a color event stream observable from functors.
+    template<typename HandleEvent, typename HandleException>
+    std::unique_ptr<SpecialisedColorEventStreamObservable<HandleEvent, HandleException>> make_colorEventStreamObservable(
+        HandleEvent handleEvent,
+        HandleException handleException,
+        std::string filename,
+        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
+        std::function<bool()> mustRestart = []() -> bool {
+            return false;
+        },
+        std::size_t chunkSize = 1 << 10
+    ) {
+        return sepia::make_unique<SpecialisedColorEventStreamObservable<HandleEvent, HandleException>>(
             std::forward<HandleEvent>(handleEvent),
             std::forward<HandleException>(handleException),
             std::move(filename),
@@ -1269,7 +1638,7 @@ namespace sepia {
     };
 
     /// SpecialisedCamera represents a template-specialised generic event-based camera.
-    template <typename HandleEvent, typename HandleException>
+    template <typename EventType, typename HandleEvent, typename HandleException>
     class SpecialisedCamera {
         public:
             SpecialisedCamera(
@@ -1288,7 +1657,7 @@ namespace sepia {
                 _events.resize(fifoSize);
                 _bufferLoop = std::thread([this]() -> void {
                     try {
-                        auto event = Event{};
+                        EventType event;
                         while (_bufferRunning.load(std::memory_order_relaxed)) {
                             const auto currentHead = _head.load(std::memory_order_relaxed);
                             if (currentHead == _tail.load(std::memory_order_acquire)) {
@@ -1315,7 +1684,7 @@ namespace sepia {
 
             /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
             /// If the event could not be inserted (FIFO full), false is returned.
-            virtual bool push(Event event) {
+            virtual bool push(EventType event) {
                 const auto currentTail = _tail.load(std::memory_order_relaxed);
                 const auto nextTail = (currentTail + 1) % _events.size();
                 if (nextTail != _head.load(std::memory_order_acquire)) {
@@ -1334,6 +1703,6 @@ namespace sepia {
             std::chrono::milliseconds _sleepDuration;
             std::atomic<std::size_t> _head;
             std::atomic<std::size_t> _tail;
-            std::vector<Event> _events;
+            std::vector<EventType> _events;
     };
 }
