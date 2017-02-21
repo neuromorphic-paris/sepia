@@ -27,10 +27,14 @@ before_install:
         fi
 
 before_script:
-    - premake4 --skip-dependencies install
+    - premake4 install
 
 script:
-    - premake4 --skip-dependencies gmake
+    - premake4 gmake
+    - cd build
+    - make
+    - cd Release
+    - ./sepiaTest
 
 after_script:
     - premake4 uninstall
