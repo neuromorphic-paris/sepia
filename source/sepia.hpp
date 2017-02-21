@@ -107,31 +107,31 @@ namespace sepia {
     /// UnreadableFile is thrown when an input file does not exist or is not readable.
     class UnreadableFile : public std::runtime_error {
         public:
-            UnreadableFile(std::string filename) : std::runtime_error("The file '" + filename + "' could not be open for reading") {}
+            UnreadableFile(const std::string& filename) : std::runtime_error("The file '" + filename + "' could not be open for reading") {}
     };
 
     /// UnwritableFile is thrown whenan output file is not writable.
     class UnwritableFile : public std::runtime_error {
         public:
-            UnwritableFile(std::string filename) : std::runtime_error("The file '" + filename + "'' could not be open for writing") {}
+            UnwritableFile(const std::string& filename) : std::runtime_error("The file '" + filename + "'' could not be open for writing") {}
     };
 
     /// WrongSignature is thrown when an input file does not have the expected signature.
     class WrongSignature : public std::runtime_error {
         public:
-            WrongSignature(std::string filename) : std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
+            WrongSignature(const std::string& filename) : std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
     };
 
     /// UnsupportedVersion is thrown when an Event Stream file uses an unsupported version.
     class UnsupportedVersion : public std::runtime_error {
         public:
-            UnsupportedVersion(std::string filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
+            UnsupportedVersion(const std::string& filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
     };
 
     /// UnsupportedMode is thrown when an Event Stream file uses an unsupported mode.
     class UnsupportedMode : public std::runtime_error {
         public:
-            UnsupportedMode(std::string filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported mode") {}
+            UnsupportedMode(const std::string& filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported mode") {}
     };
 
     /// EndOfFile is thrown when the end of an input file is reached.
@@ -143,25 +143,25 @@ namespace sepia {
     /// NoDeviceConnected is thrown when device auto-select is called without devices connected.
     class NoDeviceConnected : public std::runtime_error {
         public:
-            NoDeviceConnected(std::string deviceFamily) : std::runtime_error("No " + deviceFamily + " is connected") {}
+            NoDeviceConnected(const std::string& deviceFamily) : std::runtime_error("No " + deviceFamily + " is connected") {}
     };
 
     /// DeviceDisconnected is thrown when an active device is disonnected.
     class DeviceDisconnected : public std::runtime_error {
         public:
-            DeviceDisconnected(std::string deviceName) : std::runtime_error(deviceName + " disconnected") {}
+            DeviceDisconnected(const std::string& deviceName) : std::runtime_error(deviceName + " disconnected") {}
     };
 
     /// ParseError is thrown when a JSON parse error occurs.
     class ParseError : public std::runtime_error {
         public:
-            ParseError(std::string what, uint32_t line) : std::runtime_error("JSON parse error: " + what + " (line " + std::to_string(line) + ")") {}
+            ParseError(const std::string& what, uint32_t line) : std::runtime_error("JSON parse error: " + what + " (line " + std::to_string(line) + ")") {}
     };
 
     /// ParameterError is a logical error regarding a parameter.
     class ParameterError : public std::logic_error {
         public:
-            ParameterError(std::string what) : std::logic_error(what) {}
+            ParameterError(const std::string& what) : std::logic_error(what) {}
     };
 
     /// Split separates a stream of events into a stream of change detections and a stream of theshold crossings.
@@ -249,7 +249,7 @@ namespace sepia {
             }
 
             /// open is a thread-safe method to start logging events to the given file.
-            virtual void open(std::string filename) {
+            virtual void open(const std::string& filename) {
                 _eventStream.open(filename, std::ifstream::binary);
                 if (!_eventStream.good()) {
                     throw UnwritableFile(filename);
@@ -291,8 +291,8 @@ namespace sepia {
         public:
             EventStreamStateMachine(HandleEvent handleEvent) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
-                _previousTimestamp(0),
-                _state(State::idle)
+                _state(State::idle),
+                _event(Event{0, 0, 0, false, false})
             {
             }
             EventStreamStateMachine(const EventStreamStateMachine&) = default;
@@ -306,10 +306,9 @@ namespace sepia {
                 switch (_state) {
                     case State::idle: {
                         if ((byte & 0b11111) == 0b11111) {
-                            _previousTimestamp += ((byte & 0b11100000) >> 5) * 31;
+                            _event.timestamp += ((byte & 0b11100000) >> 5) * 31;
                         } else {
-                            _event.timestamp = _previousTimestamp + (byte & 0b11111);
-                            _previousTimestamp = _event.timestamp;
+                            _event.timestamp = _event.timestamp + (byte & 0b11111);
                             _event.x = ((byte & 0b11100000) >> 5);
                             _state = State::byte0;
                         }
@@ -334,8 +333,8 @@ namespace sepia {
 
             /// reset initialises the state machine.
             virtual void reset() {
-                _previousTimestamp = 0;
                 _state = State::idle;
+                _event.timestamp = 0;
             }
 
         protected:
@@ -348,7 +347,6 @@ namespace sepia {
             };
 
             HandleEvent _handleEvent;
-            uint64_t _previousTimestamp;
             State _state;
             Event _event;
     };
@@ -383,9 +381,9 @@ namespace sepia {
     class SpecialisedEventStreamObservable : public EventStreamObservable {
         public:
             SpecialisedEventStreamObservable(
+                const std::string& filename,
                 HandleEvent handleEvent,
                 HandleException handleException,
-                std::string filename,
                 EventStreamObservable::Dispatch dispatch,
                 std::function<bool()> mustRestart,
                 std::size_t chunkSize
@@ -402,20 +400,15 @@ namespace sepia {
                 {
                     const auto readSignature = std::string("Event Stream");
                     _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    if (_eventStream.eof() || readSignature != "Event Stream") {
-                        throw WrongSignature(filename);
-                    }
-                }
-                {
                     const auto versionMajor = _eventStream.get();
                     const auto versionMinor = _eventStream.get();
-                    const auto mode = _eventStream.get();
-                    if (_eventStream.eof()) {
+                    if (_eventStream.eof() || readSignature != "Event Stream") {
                         throw WrongSignature(filename);
                     }
                     if (versionMajor != '0' || versionMinor != '1') {
                         throw UnsupportedVersion(filename);
                     }
+                    const auto mode = _eventStream.get();
                     if (_eventStream.eof() || mode != '0') {
                         throw UnsupportedMode(filename);
                     }
@@ -428,14 +421,16 @@ namespace sepia {
                                 auto offsetSkipped = false;
                                 auto timeReference = std::chrono::system_clock::now();
                                 auto initialTimestamp = static_cast<uint64_t>(0);
+                                auto previousTimestamp = static_cast<uint64_t>(0);
                                 auto eventStreamStateMachine = make_eventStreamStateMachine(
-                                    [this, &offsetSkipped, &timeReference, &initialTimestamp](Event event) -> void {
-                                        if (offsetSkipped) {
+                                    [this, &offsetSkipped, &timeReference, &initialTimestamp, &previousTimestamp](Event event) -> void {
+                                        if (offsetSkipped && event.timestamp > previousTimestamp) {
                                             std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
                                         } else {
                                             offsetSkipped = true;
                                             initialTimestamp = event.timestamp;
                                         }
+                                        previousTimestamp = event.timestamp;
                                         this->_handleEvent(event);
                                     }
                                 );
@@ -462,9 +457,13 @@ namespace sepia {
                             }
                             case EventStreamObservable::Dispatch::synchronously: {
                                 auto timeReference = std::chrono::system_clock::now();
+                                auto previousTimestamp = static_cast<uint64_t>(0);
                                 auto eventStreamStateMachine = make_eventStreamStateMachine(
-                                    [this, &timeReference](Event event) -> void {
-                                        std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
+                                    [this, &timeReference, &previousTimestamp](Event event) -> void {
+                                        if (event.timestamp > previousTimestamp) {
+                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
+                                        }
+                                        previousTimestamp = event.timestamp;
                                         this->_handleEvent(event);
                                     }
                                 );
@@ -540,9 +539,9 @@ namespace sepia {
     /// make_eventStreamObservable creates an event stream observable from functors.
     template<typename HandleEvent, typename HandleException>
     std::unique_ptr<SpecialisedEventStreamObservable<HandleEvent, HandleException>> make_eventStreamObservable(
+        const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        std::string filename,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
         std::function<bool()> mustRestart = []() -> bool {
             return false;
@@ -550,9 +549,9 @@ namespace sepia {
         std::size_t chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
+            filename,
             std::forward<HandleEvent>(handleEvent),
             std::forward<HandleException>(handleException),
-            std::move(filename),
             dispatch,
             std::move(mustRestart),
             chunkSize
@@ -598,7 +597,7 @@ namespace sepia {
             }
 
             /// open is a thread-safe method to start logging events to the given file.
-            virtual void open(std::string filename) {
+            virtual void open(const std::string& filename) {
                 _eventStream.open(filename, std::ifstream::binary);
                 if (!_eventStream.good()) {
                     throw UnwritableFile(filename);
@@ -639,8 +638,8 @@ namespace sepia {
         public:
             ColorEventStreamStateMachine(HandleEvent handleEvent) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
-                _previousTimestamp(0),
-                _state(State::idle)
+                _state(State::idle),
+                _colorEvent(ColorEvent{0, 0, 0, 0, 0, 0})
             {
             }
             ColorEventStreamStateMachine(const ColorEventStreamStateMachine&) = default;
@@ -654,10 +653,9 @@ namespace sepia {
                 switch (_state) {
                     case State::idle: {
                         if ((byte & 0b1111111) == 0b1111111) {
-                            _previousTimestamp += ((byte & 0b10000000) >> 7) * 127;
+                            _colorEvent.timestamp += ((byte & 0b10000000) >> 7) * 127;
                         } else {
-                            _colorEvent.timestamp = _previousTimestamp + (byte & 0b1111111);
-                            _previousTimestamp = _colorEvent.timestamp;
+                            _colorEvent.timestamp = _colorEvent.timestamp+ (byte & 0b1111111);
                             _colorEvent.x = ((byte & 0b10000000) >> 7);
                             _state = State::byte0;
                         }
@@ -694,7 +692,7 @@ namespace sepia {
 
             /// reset initialises the state machine.
             virtual void reset() {
-                _previousTimestamp = 0;
+                _colorEvent.timestamp = 0;
                 _state = State::idle;
             }
 
@@ -711,7 +709,6 @@ namespace sepia {
             };
 
             HandleEvent _handleEvent;
-            uint64_t _previousTimestamp;
             State _state;
             ColorEvent _colorEvent;
     };
@@ -727,9 +724,9 @@ namespace sepia {
     class SpecialisedColorEventStreamObservable : public EventStreamObservable {
         public:
             SpecialisedColorEventStreamObservable(
+                const std::string& filename,
                 HandleEvent handleEvent,
                 HandleException handleException,
-                std::string filename,
                 EventStreamObservable::Dispatch dispatch,
                 std::function<bool()> mustRestart,
                 std::size_t chunkSize
@@ -746,20 +743,15 @@ namespace sepia {
                 {
                     const auto readSignature = std::string("Event Stream");
                     _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    if (_eventStream.eof() || readSignature != "Event Stream") {
-                        throw WrongSignature(filename);
-                    }
-                }
-                {
                     const auto versionMajor = _eventStream.get();
                     const auto versionMinor = _eventStream.get();
-                    const auto mode = _eventStream.get();
-                    if (_eventStream.eof()) {
+                    if (_eventStream.eof() || readSignature != "Event Stream") {
                         throw WrongSignature(filename);
                     }
                     if (versionMajor != '0' || versionMinor != '1') {
                         throw UnsupportedVersion(filename);
                     }
+                    const auto mode = _eventStream.get();
                     if (_eventStream.eof() || mode != '2') {
                         throw UnsupportedMode(filename);
                     }
@@ -884,9 +876,9 @@ namespace sepia {
     /// make_colorEventStreamObservable creates a color event stream observable from functors.
     template<typename HandleEvent, typename HandleException>
     std::unique_ptr<SpecialisedColorEventStreamObservable<HandleEvent, HandleException>> make_colorEventStreamObservable(
+        const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        std::string filename,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
         std::function<bool()> mustRestart = []() -> bool {
             return false;
@@ -894,9 +886,9 @@ namespace sepia {
         std::size_t chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedColorEventStreamObservable<HandleEvent, HandleException>>(
+            filename,
             std::forward<HandleEvent>(handleEvent),
             std::forward<HandleException>(handleException),
-            std::move(filename),
             dispatch,
             std::move(mustRestart),
             chunkSize
@@ -1075,7 +1067,7 @@ namespace sepia {
                 ++begin;
                 auto status = ObjectExpecting::whitespace;
                 auto end = begin;
-                std::string key = std::string();
+                auto key = std::string();
                 for (; *end != '}';) {
                     if (end == fileEnd) {
                         throw ParseError("unexpected end of file (a closing brace might be missing)", line);
@@ -1233,7 +1225,7 @@ namespace sepia {
                 ++begin;
                 auto status = ListExpecting::whitespace;
                 auto end = begin;
-                std::string key = std::string();
+                auto key = std::string();
                 for (; *end != ']';) {
                     if (end == fileEnd) {
                         throw ParseError("unexpected end of file (a closing brace might be missing)", line);
@@ -1454,7 +1446,7 @@ namespace sepia {
     /// StringParameter is a specialised parameter for string values.
     class StringParameter : public Parameter {
         public:
-            StringParameter(std::string value) :
+            StringParameter(const std::string& value) :
                 Parameter(),
                 _value(value)
             {
@@ -1583,7 +1575,7 @@ namespace sepia {
     /// The class handles file reading when constructed with a JSON filename.
     class UnvalidatedParameter {
         public:
-            UnvalidatedParameter(std::string jsonFilename) :
+            UnvalidatedParameter(const std::string& jsonFilename) :
                 _isString(true)
             {
                 if (jsonFilename != "") {
