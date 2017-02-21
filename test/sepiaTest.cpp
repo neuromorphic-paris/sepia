@@ -25,7 +25,8 @@ TEST_CASE("Event counter", "[sepia]") {
         if (sharedException) {
             std::rethrow_exception(sharedException);
         }
-        if (count != 200) {
+    } catch (const sepia::EndOfFile&) {
+        if (count != 2649650) {
             FAIL("the event stream observable generated an unexpected number of events (expected 200, got " + std::to_string(count) + ")");
         }
     } catch (const std::runtime_error& exception) {
