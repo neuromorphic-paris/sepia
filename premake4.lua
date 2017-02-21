@@ -31,8 +31,8 @@ solution 'sepia'
         files {'source/**.hpp', 'test/**.hpp', 'test/**.cpp'}
 
         -- Define the include paths
-        includedirs {path.join(prefix, 'include')}
-        libdirs {path.join(prefix, 'lib')}
+        includedirs {'/usr/local/include'}
+        libdirs {'/usr/local/lib'}
 
         -- Declare the configurations
         configuration 'Release'
@@ -49,10 +49,10 @@ solution 'sepia'
             buildoptions {'-std=c++11'}
             linkoptions {'-std=c++11'}
             links {'pthread'}
-            postbuildcommands {'cp ../source/sepia.hpp /usr/local/include/sepia.hpp')}
+            postbuildcommands {'cp ../source/sepia.hpp /usr/local/include/sepia.hpp'}
 
         -- Mac OS X specific settings
         configuration 'macosx'
             buildoptions {'-std=c++11', '-stdlib=libc++'}
             linkoptions {'-std=c++11', '-stdlib=libc++'}
-            postbuildcommands {'cp ../source/sepia.hpp /usr/local/include/sepia.hpp')}
+            postbuildcommands {'cp ../source/sepia.hpp /usr/local/include/sepia.hpp'}
