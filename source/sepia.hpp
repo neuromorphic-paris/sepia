@@ -363,7 +363,7 @@ namespace sepia {
 
             /// Dispatch specifies when the events are dispatched.
             enum class Dispatch {
-                synchronouslyAndSkipOffset,
+                synchronouslyButSkipOffset,
                 synchronously,
                 asFastAsPossible,
             };
@@ -417,20 +417,23 @@ namespace sepia {
                     try {
                         auto bytes = std::vector<uint8_t>(chunkSize);
                         switch (dispatch) {
-                            case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
+                            case EventStreamObservable::Dispatch::synchronouslyButSkipOffset: {
                                 auto offsetSkipped = false;
                                 auto timeReference = std::chrono::system_clock::now();
                                 uint64_t initialTimestamp = 0;
                                 uint64_t previousTimestamp = 0;
                                 auto eventStreamStateMachine = make_eventStreamStateMachine(
                                     [this, &offsetSkipped, &timeReference, &initialTimestamp, &previousTimestamp](Event event) -> void {
-                                        if (offsetSkipped && event.timestamp > previousTimestamp) {
-                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
+                                        if (offsetSkipped) {
+                                            if (event.timestamp > previousTimestamp) {
+                                                previousTimestamp = event.timestamp;
+                                                std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
+                                            }
                                         } else {
                                             offsetSkipped = true;
                                             initialTimestamp = event.timestamp;
+                                            previousTimestamp = event.timestamp;
                                         }
-                                        previousTimestamp = event.timestamp;
                                         this->_handleEvent(event);
                                     }
                                 );
@@ -542,7 +545,7 @@ namespace sepia {
         const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
+        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::function<bool()> mustRestart = []() -> bool {
             return false;
         },
@@ -760,17 +763,22 @@ namespace sepia {
                     try {
                         auto bytes = std::vector<uint8_t>(chunkSize);
                         switch (dispatch) {
-                            case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
+                            case EventStreamObservable::Dispatch::synchronouslyButSkipOffset: {
                                 auto offsetSkipped = false;
                                 auto timeReference = std::chrono::system_clock::now();
                                 uint64_t initialTimestamp = 0;
+                                uint64_t previousTimestamp = 0;
                                 auto colorEventStreamStateMachine = make_colorEventStreamStateMachine(
-                                    [this, &offsetSkipped, &timeReference, &initialTimestamp](ColorEvent colorEvent) -> void {
+                                    [this, &offsetSkipped, &timeReference, &initialTimestamp, &previousTimestamp](ColorEvent colorEvent) -> void {
                                         if (offsetSkipped) {
-                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(colorEvent.timestamp - initialTimestamp));
+                                            if (colorEvent.timestamp > previousTimestamp) {
+                                                previousTimestamp = colorEvent.timestamp;
+                                                std::this_thread::sleep_until(timeReference + std::chrono::microseconds(colorEvent.timestamp - initialTimestamp));
+                                            }
                                         } else {
                                             offsetSkipped = true;
                                             initialTimestamp = colorEvent.timestamp;
+                                            previousTimestamp = colorEvent.timestamp;
                                         }
                                         this->_handleEvent(colorEvent);
                                     }
@@ -879,7 +887,7 @@ namespace sepia {
         const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyAndSkipOffset,
+        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::function<bool()> mustRestart = []() -> bool {
             return false;
         },
