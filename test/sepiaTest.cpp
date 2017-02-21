@@ -1,11 +1,14 @@
 #include "catch.hpp"
 
-#include "../source/opalKellyAtisSepia.hpp"
+#include "../source/sepia.hpp"
 
 #include <mutex>
 
 TEST_CASE("Event counter", "[sepia]") {
-    auto count = static_cast<std::size_t>(0);
+    std::size_t count = 0;
+    std::exception_ptr sharedException;
+    std::mutex lock;
+    lock.lock();
     try {
         auto camera = sepia::make_eventStreamObservable(
             "../../test/sepiaTest.es",
