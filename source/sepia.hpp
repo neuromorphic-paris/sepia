@@ -227,7 +227,7 @@ namespace sepia {
                     auto relativeTimestamp = event.timestamp - _previousTimestamp;
                     if (relativeTimestamp > 30) {
                         const auto numberOfOverflows = relativeTimestamp / 31;
-                        for (auto index = static_cast<std::size_t>(0); index < numberOfOverflows / 8; ++index) {
+                        for (std::size_t index = 0; index < numberOfOverflows / 8; ++index) {
                             _eventStream.put(static_cast<uint8_t>(0b11111111));
                         }
                         const auto numberOfOverflowsLeft = numberOfOverflows % 8;
@@ -420,8 +420,8 @@ namespace sepia {
                             case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
                                 auto offsetSkipped = false;
                                 auto timeReference = std::chrono::system_clock::now();
-                                auto initialTimestamp = static_cast<uint64_t>(0);
-                                auto previousTimestamp = static_cast<uint64_t>(0);
+                                uint64_t initialTimestamp = 0;
+                                uint64_t previousTimestamp = 0;
                                 auto eventStreamStateMachine = make_eventStreamStateMachine(
                                     [this, &offsetSkipped, &timeReference, &initialTimestamp, &previousTimestamp](Event event) -> void {
                                         if (offsetSkipped && event.timestamp > previousTimestamp) {
@@ -457,7 +457,7 @@ namespace sepia {
                             }
                             case EventStreamObservable::Dispatch::synchronously: {
                                 auto timeReference = std::chrono::system_clock::now();
-                                auto previousTimestamp = static_cast<uint64_t>(0);
+                                uint64_t previousTimestamp = 0;
                                 auto eventStreamStateMachine = make_eventStreamStateMachine(
                                     [this, &timeReference, &previousTimestamp](Event event) -> void {
                                         if (event.timestamp > previousTimestamp) {
@@ -580,7 +580,7 @@ namespace sepia {
                     auto relativeTimestamp = colorEvent.timestamp - _previousTimestamp;
                     if (relativeTimestamp > 126) {
                         const auto numberOfOverflows = relativeTimestamp / 127;
-                        for (auto index = static_cast<std::size_t>(0); index < numberOfOverflows; ++index) {
+                        for (std::size_t index = 0; index < numberOfOverflows; ++index) {
                             _eventStream.put(static_cast<uint8_t>(0b11111111));
                         }
                         relativeTimestamp -= numberOfOverflows * 127;
@@ -763,7 +763,7 @@ namespace sepia {
                             case EventStreamObservable::Dispatch::synchronouslyAndSkipOffset: {
                                 auto offsetSkipped = false;
                                 auto timeReference = std::chrono::system_clock::now();
-                                auto initialTimestamp = static_cast<uint64_t>(0);
+                                uint64_t initialTimestamp = 0;
                                 auto colorEventStreamStateMachine = make_colorEventStreamStateMachine(
                                     [this, &offsetSkipped, &timeReference, &initialTimestamp](ColorEvent colorEvent) -> void {
                                         if (offsetSkipped) {
@@ -1414,8 +1414,8 @@ namespace sepia {
                 if (_value < _minimum) {
                     throw ParameterError(std::string("smaller than minimum ") + std::to_string(_minimum));
                 }
-                auto integerPart = static_cast<double>(0);
-                if (_isInteger && std::modf(_value, &integerPart) != static_cast<double>(0)) {
+                auto integerPart = 0.0;
+                if (_isInteger && std::modf(_value, &integerPart) != 0.0) {
                     throw ParameterError("expected an integer");
                 }
             }
