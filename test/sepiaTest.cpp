@@ -12,7 +12,7 @@ TEST_CASE("Event counter", "[sepia]") {
             [&](sepia::Event) -> void {
                 ++count;
             },
-            [&sharedException, &lock](std::exception_ptr exception) {
+            [&](std::exception_ptr exception) {
                 sharedException = exception;
                 lock.unlock();
             }
@@ -21,6 +21,9 @@ TEST_CASE("Event counter", "[sepia]") {
         lock.unlock();
         if (sharedException) {
             std::rethrow_exception(sharedException);
+        }
+        if (count != 200) {
+            FAIL("the event stream observable generated an unexpected number of events (expected 200, got " + std::to_string(count) + ")");
         }
     } catch (const std::runtime_error& exception) {
         FAIL(exception.what());
