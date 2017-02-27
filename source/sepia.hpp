@@ -1700,7 +1700,7 @@ namespace sepia {
             HandleException _handleException;
             std::thread _bufferLoop;
             std::atomic_bool _bufferRunning;
-            std::chrono::milliseconds _sleepDuration;
+            const std::chrono::milliseconds _sleepDuration;
             std::atomic<std::size_t> _head;
             std::atomic<std::size_t> _tail;
             std::vector<EventType> _events;
