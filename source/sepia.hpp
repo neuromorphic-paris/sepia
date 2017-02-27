@@ -386,7 +386,7 @@ namespace sepia {
                 HandleException handleException,
                 EventStreamObservable::Dispatch dispatch,
                 std::function<bool()> mustRestart,
-                std::size_t chunkSize
+                const std::size_t& chunkSize
             ) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
                 _handleException(std::forward<HandleException>(handleException)),
@@ -549,7 +549,7 @@ namespace sepia {
         std::function<bool()> mustRestart = []() -> bool {
             return false;
         },
-        std::size_t chunkSize = 1 << 10
+        const std::size_t& chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
             filename,
@@ -732,7 +732,7 @@ namespace sepia {
                 HandleException handleException,
                 EventStreamObservable::Dispatch dispatch,
                 std::function<bool()> mustRestart,
-                std::size_t chunkSize
+                const std::size_t& chunkSize
             ) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
                 _handleException(std::forward<HandleException>(handleException)),
@@ -891,7 +891,7 @@ namespace sepia {
         std::function<bool()> mustRestart = []() -> bool {
             return false;
         },
-        std::size_t chunkSize = 1 << 10
+        const std::size_t& chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedColorEventStreamObservable<HandleEvent, HandleException>>(
             filename,
@@ -1305,7 +1305,7 @@ namespace sepia {
     /// BooleanParameter is a specialised parameter for boolean values.
     class BooleanParameter : public Parameter {
         public:
-            BooleanParameter(bool value) :
+            BooleanParameter(const bool& value) :
                 Parameter(),
                 _value(value)
             {
@@ -1357,7 +1357,7 @@ namespace sepia {
     /// NumberParameter is a specialised parameter for numeric values.
     class NumberParameter : public Parameter {
         public:
-            NumberParameter(double value, double minimum, double maximum, bool isInteger) :
+            NumberParameter(const double& value, const double& minimum, const double& maximum, const bool& isInteger) :
                 Parameter(),
                 _value(value),
                 _minimum(minimum),
@@ -1437,7 +1437,7 @@ namespace sepia {
     /// CharParameter is a specialised number parameter for char numeric values.
     class CharParameter : public NumberParameter {
         public:
-            CharParameter(double value) :
+            CharParameter(const double& value) :
                 NumberParameter(value, 0, 256, true)
             {
             }
@@ -1508,7 +1508,7 @@ namespace sepia {
     /// EnumParameter is a specialised parameter for string values with a given set of possible values.
     class EnumParameter : public StringParameter {
         public:
-            EnumParameter(std::string value, std::unordered_set<std::string> availableValues) :
+            EnumParameter(const std::string& value, const std::unordered_set<std::string>& availableValues) :
                 StringParameter(value),
                 _availableValues(availableValues)
             {
@@ -1560,6 +1560,7 @@ namespace sepia {
             }
 
         protected:
+
             /// validate determines if the enum is valid regarding the given constraints.
             void validate() {
                 if (_availableValues.find(_value) == _availableValues.end()) {
@@ -1644,8 +1645,8 @@ namespace sepia {
             SpecialisedCamera(
                 HandleEvent handleEvent,
                 HandleException handleException,
-                std::size_t fifoSize,
-                std::chrono::milliseconds sleepDuration
+                const std::size_t& fifoSize,
+                const std::chrono::milliseconds& sleepDuration
             ) :
                 _handleEvent(std::forward<HandleEvent>(handleEvent)),
                 _handleException(std::forward<HandleException>(handleException)),
