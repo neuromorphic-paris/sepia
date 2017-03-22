@@ -22,6 +22,11 @@ namespace sepia {
         return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
     }
 
+    /// falseFunction is a function returning false.
+    bool falseFunction() {
+        return false;
+    }
+
     /// Event represents the parameters of a change detection or an exposure measurement.
     struct Event {
 
@@ -546,9 +551,7 @@ namespace sepia {
         HandleEvent handleEvent,
         HandleException handleException,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
-        std::function<bool()> mustRestart = []() -> bool {
-            return false;
-        },
+        std::function<bool()> mustRestart = falseFunction,
         const std::size_t& chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedEventStreamObservable<HandleEvent, HandleException>>(
@@ -888,9 +891,7 @@ namespace sepia {
         HandleEvent handleEvent,
         HandleException handleException,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
-        std::function<bool()> mustRestart = []() -> bool {
-            return false;
-        },
+        std::function<bool()> mustRestart = falseFunction,
         const std::size_t& chunkSize = 1 << 10
     ) {
         return sepia::make_unique<SpecialisedColorEventStreamObservable<HandleEvent, HandleException>>(
