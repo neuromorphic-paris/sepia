@@ -32,11 +32,11 @@ namespace sepia {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint16_t x;
+        uint64_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases bottom to top.
-        uint16_t y;
+        uint64_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
@@ -54,11 +54,11 @@ namespace sepia {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint16_t x;
+        uint64_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases from bottom to top.
-        uint16_t y;
+        uint64_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
@@ -72,11 +72,11 @@ namespace sepia {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint16_t x;
+        uint64_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases from bottom to top.
-        uint16_t y;
+        uint64_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
@@ -90,11 +90,11 @@ namespace sepia {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint16_t x;
+        uint64_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases bottom to top.
-        uint16_t y;
+        uint64_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
@@ -232,10 +232,10 @@ namespace sepia {
                     auto relativeTimestamp = event.timestamp - _previousTimestamp;
                     if (relativeTimestamp > 30) {
                         const auto numberOfOverflows = relativeTimestamp / 31;
-                        for (std::size_t index = 0; index < numberOfOverflows / 8; ++index) {
+                        for (std::size_t index = 0; index < numberOfOverflows / 7; ++index) {
                             _eventStream.put(static_cast<uint8_t>(0b11111111));
                         }
-                        const auto numberOfOverflowsLeft = numberOfOverflows % 8;
+                        const auto numberOfOverflowsLeft = numberOfOverflows % 7;
                         if (numberOfOverflowsLeft > 0) {
                             _eventStream.put(static_cast<uint8_t>(0b11111) | static_cast<uint8_t>(numberOfOverflowsLeft << 5));
                         }
@@ -320,13 +320,13 @@ namespace sepia {
                         break;
                     }
                     case State::byte0: {
-                        _event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
+                        _event.x |= (static_cast<uint64_t>(byte & 0b111111) << 3);
                         _event.y = ((byte & 0b11000000) >> 6);
                         _state = State::byte1;
                         break;
                     }
                     case State::byte1: {
-                        _event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
+                        _event.y |= (static_cast<uint64_t>(byte & 0b111111) << 2);
                         _event.isThresholdCrossing = (((byte & 0b1000000) >> 6) == 1);
                         _event.polarity = (((byte & 0b10000000) >> 7) == 1);
                         _handleEvent(_event);
@@ -668,7 +668,7 @@ namespace sepia {
                         break;
                     }
                     case State::byte0: {
-                        _colorEvent.x |= (static_cast<uint16_t>(byte) << 1);
+                        _colorEvent.x |= (static_cast<uint64_t>(byte) << 1);
                         _state = State::byte1;
                         break;
                     }
