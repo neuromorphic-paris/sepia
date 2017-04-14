@@ -32,11 +32,11 @@ namespace sepia {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint64_t x;
+        uint16_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases bottom to top.
-        uint64_t y;
+        uint16_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
@@ -47,54 +47,54 @@ namespace sepia {
         /// change detection: polarity is false if the light is decreasing.
         /// exposure measurement: polarity is false for a first threshold crossing.
         bool polarity;
-    };
+    } __attribute__((packed));
 
     /// ChangeDetection represents the parameters of a change detection.
     struct ChangeDetection {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint64_t x;
+        uint16_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases from bottom to top.
-        uint64_t y;
+        uint16_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
 
         /// isIncrease is false if the light is decreasing.
         bool isIncrease;
-    };
+    } __attribute__((packed));
 
     /// ThresholdCrossing represent the parameters of a threshold crossing.
     struct ThresholdCrossing {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint64_t x;
+        uint16_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases from bottom to top.
-        uint64_t y;
+        uint16_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
 
         /// isSecond is false if the event is a first threshold crossing.
         bool isSecond;
-    };
+    } __attribute__((packed));
 
     /// ColorEvent represents the parameters of a color event.
     struct ColorEvent {
 
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
-        uint64_t x;
+        uint16_t x;
 
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases bottom to top.
-        uint64_t y;
+        uint16_t y;
 
         /// timestamp represents the event's timestamp.
         uint64_t timestamp;
@@ -107,7 +107,7 @@ namespace sepia {
 
         /// b represents the blue component of the color.
         uint8_t b;
-    };
+    } __attribute__((packed));
 
     /// UnreadableFile is thrown when an input file does not exist or is not readable.
     class UnreadableFile : public std::runtime_error {
@@ -320,13 +320,13 @@ namespace sepia {
                         break;
                     }
                     case State::byte0: {
-                        _event.x |= (static_cast<uint64_t>(byte & 0b111111) << 3);
+                        _event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
                         _event.y = ((byte & 0b11000000) >> 6);
                         _state = State::byte1;
                         break;
                     }
                     case State::byte1: {
-                        _event.y |= (static_cast<uint64_t>(byte & 0b111111) << 2);
+                        _event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
                         _event.isThresholdCrossing = (((byte & 0b1000000) >> 6) == 1);
                         _event.polarity = (((byte & 0b10000000) >> 7) == 1);
                         _handleEvent(_event);
@@ -668,7 +668,7 @@ namespace sepia {
                         break;
                     }
                     case State::byte0: {
-                        _colorEvent.x |= (static_cast<uint64_t>(byte) << 1);
+                        _colorEvent.x |= (static_cast<uint16_t>(byte) << 1);
                         _state = State::byte1;
                         break;
                     }
