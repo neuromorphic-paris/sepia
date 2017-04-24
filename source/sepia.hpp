@@ -1048,7 +1048,7 @@ namespace sepia {
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::size_t chunkSize = 1 << 10
     ) {
-        return sepia::make_unique<AtisEventStreamObservable<HandleEvent, HandleException, MustRestart>>(
+        return sepia::make_unique<ColorEventStreamObservable<HandleEvent, HandleException, MustRestart>>(
             filename,
             std::forward<HandleEvent>(handleEvent),
             std::forward<HandleException>(handleException),
