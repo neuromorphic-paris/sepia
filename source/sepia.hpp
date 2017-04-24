@@ -1012,7 +1012,7 @@ namespace sepia {
                     }
                 }
                 _loop = std::thread(
-                    readAndDispatch<ColorEvent, HandleAtisByte, MustRestart, HandleEvent, HandleException>,
+                    readAndDispatch<ColorEvent, HandleColorByte, MustRestart, HandleEvent, HandleException>,
                     std::ref(_eventStream),
                     std::ref(_running),
                     dispatch,
