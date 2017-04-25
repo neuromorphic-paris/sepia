@@ -453,7 +453,7 @@ namespace sepia {
             uint64_t _previousTimestamp;
     };
 
-    /// HandleDvsByte implements the event stream state machine for ATIS events.
+    /// HandleDvsByte implements the event stream state machine for DVS events.
     class HandleDvsByte {
         public:
             HandleDvsByte() :
@@ -1138,7 +1138,7 @@ namespace sepia {
             uint64_t _previousTimestamp;
     };
 
-    /// HandleGenericByte implements the event stream state machine for color events.
+    /// HandleGenericByte implements the event stream state machine for generic events.
     class HandleGenericByte {
         public:
             HandleGenericByte() :
