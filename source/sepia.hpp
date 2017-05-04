@@ -23,7 +23,7 @@ namespace sepia {
     }
 
     /// falseFunction is a function returning false.
-    bool falseFunction() {
+    inline bool falseFunction() {
         return false;
     }
 
@@ -582,7 +582,7 @@ namespace sepia {
         const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        MustRestart mustRestart = falseFunction,
+        MustRestart mustRestart = &falseFunction,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::size_t chunkSize = 1 << 10
     ) {
@@ -808,7 +808,7 @@ namespace sepia {
         const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        MustRestart mustRestart = falseFunction,
+        MustRestart mustRestart = &falseFunction,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::size_t chunkSize = 1 << 10
     ) {
@@ -1044,7 +1044,7 @@ namespace sepia {
         const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        MustRestart mustRestart = falseFunction,
+        MustRestart mustRestart = &falseFunction,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::size_t chunkSize = 1 << 10
     ) {
@@ -1307,7 +1307,7 @@ namespace sepia {
         const std::string& filename,
         HandleEvent handleEvent,
         HandleException handleException,
-        MustRestart mustRestart = falseFunction,
+        MustRestart mustRestart = &falseFunction,
         EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
         std::size_t chunkSize = 1 << 10
     ) {
