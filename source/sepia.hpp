@@ -1723,7 +1723,7 @@ namespace sepia {
     /// BooleanParameter is a specialised parameter for boolean values.
     class BooleanParameter : public Parameter {
         public:
-            BooleanParameter(const bool& value) :
+            BooleanParameter(bool value) :
                 Parameter(),
                 _value(value)
             {
@@ -1775,7 +1775,7 @@ namespace sepia {
     /// NumberParameter is a specialised parameter for numeric values.
     class NumberParameter : public Parameter {
         public:
-            NumberParameter(const double& value, const double& minimum, const double& maximum, const bool& isInteger) :
+            NumberParameter(double value, double minimum, double maximum, bool isInteger) :
                 Parameter(),
                 _value(value),
                 _minimum(minimum),
@@ -1855,7 +1855,7 @@ namespace sepia {
     /// CharParameter is a specialised number parameter for char numeric values.
     class CharParameter : public NumberParameter {
         public:
-            CharParameter(const double& value) :
+            CharParameter(double value) :
                 NumberParameter(value, 0, 256, true)
             {
             }
