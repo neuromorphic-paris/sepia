@@ -292,7 +292,7 @@ namespace sepia {
                                     }
                                     throw EndOfFile();
                                 }
-                                for (auto&& byte : bytes) {
+                                for (auto byte : bytes) {
                                     if (handleByte(byte, event)) {
                                         if (offsetSkipped) {
                                             if (event.timestamp > previousTimestamp) {
@@ -333,7 +333,7 @@ namespace sepia {
                                     }
                                     throw EndOfFile();
                                 }
-                                for (auto&& byte : bytes) {
+                                for (auto byte : bytes) {
                                     if (handleByte(byte, event)) {
                                         if (event.timestamp > previousTimestamp) {
                                             std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
@@ -361,7 +361,7 @@ namespace sepia {
                                     }
                                     throw EndOfFile();
                                 }
-                                for (auto&& byte : bytes) {
+                                for (auto byte : bytes) {
                                     if (handleByte(byte, event)) {
                                         handleEvent(event);
                                     }
@@ -1480,7 +1480,7 @@ namespace sepia {
             }
             virtual std::unique_ptr<Parameter> clone() const override {
                 std::unordered_map<std::string, std::unique_ptr<Parameter>> newParameterByKey;
-                for (auto&& keyAndParameter : _parameterByKey) {
+                for (const auto& keyAndParameter : _parameterByKey) {
                     newParameterByKey.insert(std::make_pair(keyAndParameter.first, keyAndParameter.second->clone()));
                 }
                 return make_unique<ObjectParameter>(std::move(newParameterByKey));
@@ -1558,7 +1558,7 @@ namespace sepia {
             virtual void load(const Parameter& parameter) override {
                 try {
                     const auto& objectParameter = dynamic_cast<const ObjectParameter&>(parameter);
-                    for (auto&& keyAndParameter : objectParameter) {
+                    for (const auto& keyAndParameter : objectParameter) {
                         if (_parameterByKey.find(keyAndParameter.first) == _parameterByKey.end()) {
                             throw std::runtime_error("Unexpected key " + keyAndParameter.first);
                         }
@@ -1637,7 +1637,7 @@ namespace sepia {
             }
             virtual std::unique_ptr<Parameter> clone() const override {
                 std::vector<std::unique_ptr<Parameter>> newParameters;
-                for (auto&& parameter : _parameters) {
+                for (const auto& parameter : _parameters) {
                     newParameters.push_back(parameter->clone());
                 }
                 return make_unique<ListParameter>(std::move(newParameters), _templateParameter->clone());
@@ -1682,7 +1682,7 @@ namespace sepia {
                 try {
                     const ListParameter& listParameter = dynamic_cast<const ListParameter&>(parameter);
                     _parameters.clear();
-                    for (auto&& storedParameter : listParameter) {
+                    for (const auto& storedParameter : listParameter) {
                         auto newParameter = _templateParameter->clone();
                         newParameter->load(*storedParameter);
                         _parameters.push_back(std::move(newParameter));
@@ -1983,7 +1983,7 @@ namespace sepia {
             void validate() {
                 if (_availableValues.find(_value) == _availableValues.end()) {
                     auto availableValuesString = std::string("{");
-                    for (auto&& availableValue : _availableValues) {
+                    for (const auto& availableValue : _availableValues) {
                         if (availableValuesString != "{") {
                             availableValuesString += ", ";
                         }
