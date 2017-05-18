@@ -1483,7 +1483,7 @@ namespace sepia {
                 for (const auto& keyAndParameter : _parameterByKey) {
                     newParameterByKey.insert(std::make_pair(keyAndParameter.first, keyAndParameter.second->clone()));
                 }
-                return make_unique<ObjectParameter>(std::move(newParameterByKey));
+                return sepia::make_unique<ObjectParameter>(std::move(newParameterByKey));
             }
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
@@ -1599,7 +1599,7 @@ namespace sepia {
         public:
             /// makeEmpty generates an empty list parameter with the given value as template.
             static std::unique_ptr<ListParameter> makeEmpty(std::unique_ptr<Parameter> templateParameter) {
-                return make_unique<ListParameter>(std::vector<std::unique_ptr<Parameter>>(), std::move(templateParameter));
+                return sepia::make_unique<ListParameter>(std::vector<std::unique_ptr<Parameter>>(), std::move(templateParameter));
             }
 
             template <typename ParameterUniquePtrType>
@@ -1640,7 +1640,7 @@ namespace sepia {
                 for (const auto& parameter : _parameters) {
                     newParameters.push_back(parameter->clone());
                 }
-                return make_unique<ListParameter>(std::move(newParameters), _templateParameter->clone());
+                return sepia::make_unique<ListParameter>(std::move(newParameters), _templateParameter->clone());
             }
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 _parameters.clear();
@@ -1740,7 +1740,7 @@ namespace sepia {
                 return _value;
             }
             virtual std::unique_ptr<Parameter> clone() const override {
-                return make_unique<BooleanParameter>(_value);
+                return sepia::make_unique<BooleanParameter>(_value);
             }
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
@@ -1796,7 +1796,7 @@ namespace sepia {
                 return _value;
             }
             virtual std::unique_ptr<Parameter> clone() const override {
-                return make_unique<NumberParameter>(_value, _minimum, _maximum, _isInteger);
+                return sepia::make_unique<NumberParameter>(_value, _minimum, _maximum, _isInteger);
             }
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
@@ -1865,7 +1865,7 @@ namespace sepia {
             CharParameter& operator=(CharParameter&&) = default;
             virtual ~CharParameter() {}
             virtual std::unique_ptr<Parameter> clone() const override {
-                return make_unique<CharParameter>(_value);
+                return sepia::make_unique<CharParameter>(_value);
             }
     };
 
@@ -1889,7 +1889,7 @@ namespace sepia {
                 return _value;
             }
             virtual std::unique_ptr<Parameter> clone() const override {
-                return make_unique<StringParameter>(_value);
+                return sepia::make_unique<StringParameter>(_value);
             }
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
@@ -1941,7 +1941,7 @@ namespace sepia {
             EnumParameter& operator=(EnumParameter&&) = default;
             virtual ~EnumParameter() {}
             virtual std::unique_ptr<Parameter> clone() const override {
-                return make_unique<EnumParameter>(_value, _availableValues);
+                return sepia::make_unique<EnumParameter>(_value, _availableValues);
             }
             virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
                 begin = trim(begin, fileEnd, line);
