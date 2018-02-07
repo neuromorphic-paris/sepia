@@ -9,7 +9,7 @@ Within a Git repository, run the commands:
 ```sh
 mkdir -p third_party
 cd third_party
-git add submodule https://github.com/neuromorphic-paris/sepia.git
+git submodule add https://github.com/neuromorphic-paris/sepia.git
 ```
 
 # User guides and documentation
