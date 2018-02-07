@@ -447,8 +447,8 @@ namespace sepia {
             _condition_variable.notify_one();
         }
 
-        /// lock blocks until the held exception is set.
-        virtual void lock() {
+        /// wait blocks until the held exception is set.
+        virtual void wait() {
             std::unique_lock<std::mutex> exception_lock(_mutex);
             if (_exception == nullptr) {
                 _condition_variable.wait(exception_lock, [&] { return _exception != nullptr; });
@@ -725,7 +725,7 @@ namespace sepia {
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.lock();
+        capture_exception.wait();
         capture_exception.throw_if_not_end_of_file();
     }
 
@@ -943,7 +943,7 @@ namespace sepia {
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.lock();
+        capture_exception.wait();
         capture_exception.throw_if_not_end_of_file();
     }
 
@@ -1164,7 +1164,7 @@ namespace sepia {
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.lock();
+        capture_exception.wait();
         capture_exception.throw_if_not_end_of_file();
     }
 
@@ -1393,7 +1393,7 @@ namespace sepia {
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.lock();
+        capture_exception.wait();
         capture_exception.throw_if_not_end_of_file();
     }
 
