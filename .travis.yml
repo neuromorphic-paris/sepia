@@ -18,24 +18,22 @@ before_install:
         if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
             brew update
             brew install premake
+            brew install clang-format
         fi
     - |
         if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
             sudo apt-get -qq update -y
             sudo apt-get install premake4 -y
+            sudo apt-get install  -y
             sudo ln -s /usr/bin/make /usr/bin/gmake
-            sudo chown -R `whoami` /usr/local
         fi
-
-before_script:
-    - premake4 install
 
 script:
     - premake4 gmake
     - cd build
     - make
-    - cd Release
-    - ./sepiaTest
+    - cd release
+    - ./sepia_test
 
 after_script:
     - premake4 uninstall

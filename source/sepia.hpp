@@ -1,35 +1,54 @@
 #pragma once
 
-#include <memory>
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <fstream>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
-#include <vector>
-#include <functional>
-#include <atomic>
 #include <thread>
-#include <chrono>
-#include <fstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 /// sepia bundles functions and classes to represent a camera and handle its raw stream of events.
 namespace sepia {
 
-    /// make_unique creates a unique_ptr.
-    template<typename T, typename ...Args>
-    std::unique_ptr<T> make_unique(Args&& ...args) {
-        return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+    /// version returns the implement Event Stream version.
+    inline std::array<uint8_t, 3> version() {
+        return {2, 0, 0};
     }
 
-    /// falseFunction is a function returning false.
-    inline bool falseFunction() {
+    /// make_unique creates a unique_ptr.
+    template <typename type, typename... arguments_t>
+    std::unique_ptr<type> make_unique(arguments_t&&... arguments) {
+        return std::unique_ptr<type>(new type(std::forward<arguments_t>(arguments)...));
+    }
+
+    /// false_function is a function returning false.
+    inline bool false_function() {
         return false;
     }
 
-    /// DvsEvent represents the parameters of a change detection.
-    struct DvsEvent {
+    /// generic_event_t represents the parameters of a generic event.
+    struct generic_event_t {
+        /// t represents the event's timestamp.
+        uint64_t t;
 
+        /// data represents untagged data associated with the event.
+        uint64_t data;
+
+        /// extra_bit is an extra data bit associated with the event.
+        bool extra_bit;
+    } __attribute__((packed));
+
+    /// dvs_event_t represents the parameters of a change detection.
+    struct dvs_event_t {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -38,16 +57,15 @@ namespace sepia {
         /// y is 0 on the bottom, and increases from bottom to top.
         uint16_t y;
 
-        /// timestamp represents the event's timestamp.
-        uint64_t timestamp;
+        /// t represents the event's timestamp.
+        uint64_t t;
 
-        /// isIncrease is false if the light is decreasing.
-        bool isIncrease;
+        /// is_increase is false if the light is decreasing.
+        bool is_increase;
     } __attribute__((packed));
 
-    /// AtisEvent represents the parameters of a change detection or an exposure measurement.
-    struct AtisEvent {
-
+    /// atis_event_t represents the parameters of a change detection or an exposure measurement.
+    struct atis_event_t {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -56,20 +74,19 @@ namespace sepia {
         /// y is 0 on the bottom, and increases bottom to top.
         uint16_t y;
 
-        /// timestamp represents the event's timestamp.
-        uint64_t timestamp;
+        /// t represents the event's timestamp.
+        uint64_t t;
 
-        /// isThresholdCrossing is false if the event is a change detection, and true if it is a threshold crossing.
-        bool isThresholdCrossing;
+        /// is_threshold_crossing is false if the event is a change detection, and true if it is a threshold crossing.
+        bool is_threshold_crossing;
 
         /// change detection: polarity is false if the light is decreasing.
         /// exposure measurement: polarity is false for a first threshold crossing.
         bool polarity;
     } __attribute__((packed));
 
-    /// ThresholdCrossing represent the parameters of a threshold crossing.
-    struct ThresholdCrossing {
-
+    /// threshold_crossing_t represent the parameters of a threshold crossing.
+    struct threshold_crossing_t {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -78,16 +95,15 @@ namespace sepia {
         /// y is 0 on the bottom, and increases from bottom to top.
         uint16_t y;
 
-        /// timestamp represents the event's timestamp.
-        uint64_t timestamp;
+        /// t represents the event's timestamp.
+        uint64_t t;
 
-        /// isSecond is false if the event is a first threshold crossing.
-        bool isSecond;
+        /// is_second is false if the event is a first threshold crossing.
+        bool is_second;
     } __attribute__((packed));
 
-    /// ColorEvent represents the parameters of a color event.
-    struct ColorEvent {
-
+    /// color_event_t represents the parameters of a color event.
+    struct color_event_t {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -96,8 +112,8 @@ namespace sepia {
         /// y is 0 on the bottom, and increases bottom to top.
         uint16_t y;
 
-        /// timestamp represents the event's timestamp.
-        uint64_t timestamp;
+        /// t represents the event's timestamp.
+        uint64_t t;
 
         /// r represents the red component of the color.
         uint8_t r;
@@ -109,2019 +125,2075 @@ namespace sepia {
         uint8_t b;
     } __attribute__((packed));
 
-    /// GenericEvent represents the parameters of a generic event.
-    struct GenericEvent {
-
-        /// timestamp represents the event's timestamp.
-        uint64_t timestamp;
-
-        /// data represents untagged data associated with the event.
-        uint64_t data;
-
-        /// extraBit is an extra data bit associated with the event.
-        bool extraBit;
-    } __attribute__((packed));
-
-    /// UnreadableFile is thrown when an input file does not exist or is not readable.
-    class UnreadableFile : public std::runtime_error {
+    /// unreadable_file is thrown when an input file does not exist or is not readable.
+    class unreadable_file : public std::runtime_error {
         public:
-            UnreadableFile(const std::string& filename) : std::runtime_error("The file '" + filename + "' could not be open for reading") {}
+        unreadable_file(const std::string& filename) :
+            std::runtime_error("The file '" + filename + "' could not be open for reading") {}
     };
 
-    /// UnwritableFile is thrown whenan output file is not writable.
-    class UnwritableFile : public std::runtime_error {
+    /// unwritable_file is thrown whenan output file is not writable.
+    class unwritable_file : public std::runtime_error {
         public:
-            UnwritableFile(const std::string& filename) : std::runtime_error("The file '" + filename + "'' could not be open for writing") {}
+        unwritable_file(const std::string& filename) :
+            std::runtime_error("The file '" + filename + "'' could not be open for writing") {}
     };
 
-    /// WrongSignature is thrown when an input file does not have the expected signature.
-    class WrongSignature : public std::runtime_error {
+    /// wrong_signature is thrown when an input file does not have the expected signature.
+    class wrong_signature : public std::runtime_error {
         public:
-            WrongSignature(const std::string& filename) : std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
+        wrong_signature(const std::string& filename) :
+            std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
     };
 
-    /// UnsupportedVersion is thrown when an Event Stream file uses an unsupported version.
-    class UnsupportedVersion : public std::runtime_error {
+    /// unsupported_version is thrown when an Event Stream file uses an unsupported version.
+    class unsupported_version : public std::runtime_error {
         public:
-            UnsupportedVersion(const std::string& filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
+        unsupported_version(const std::string& filename) :
+            std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
     };
 
-    /// UnsupportedMode is thrown when an Event Stream file uses an unsupported mode.
-    class UnsupportedMode : public std::runtime_error {
+    /// unsupported_event_type is thrown when an Event Stream file uses an unsupported event type.
+    class unsupported_event_type : public std::runtime_error {
         public:
-            UnsupportedMode(const std::string& filename) : std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported mode") {}
+        unsupported_event_type(const std::string& filename) :
+            std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported event type") {}
     };
 
-    /// EndOfFile is thrown when the end of an input file is reached.
-    class EndOfFile : public std::runtime_error {
+    /// end_of_file is thrown when the end of an input file is reached.
+    class end_of_file : public std::runtime_error {
         public:
-            EndOfFile() : std::runtime_error("End of file reached") {}
+        end_of_file() : std::runtime_error("End of file reached") {}
     };
 
-    /// NoDeviceConnected is thrown when device auto-select is called without devices connected.
-    class NoDeviceConnected : public std::runtime_error {
+    /// no_device_connected is thrown when device auto-select is called without devices connected.
+    class no_device_connected : public std::runtime_error {
         public:
-            NoDeviceConnected(const std::string& deviceFamily) : std::runtime_error("No " + deviceFamily + " is connected") {}
+        no_device_connected(const std::string& device_family) :
+            std::runtime_error("No " + device_family + " is connected") {}
     };
 
-    /// DeviceDisconnected is thrown when an active device is disonnected.
-    class DeviceDisconnected : public std::runtime_error {
+    /// device_disconnected is thrown when an active device is disonnected.
+    class device_disconnected : public std::runtime_error {
         public:
-            DeviceDisconnected(const std::string& deviceName) : std::runtime_error(deviceName + " disconnected") {}
+        device_disconnected(const std::string& device_name) : std::runtime_error(device_name + " disconnected") {}
     };
 
-    /// ParseError is thrown when a JSON parse error occurs.
-    class ParseError : public std::runtime_error {
+    /// parse_error is thrown when a JSON parse error occurs.
+    class parse_error : public std::runtime_error {
         public:
-            ParseError(const std::string& what, uint32_t line) : std::runtime_error("JSON parse error: " + what + " (line " + std::to_string(line) + ")") {}
+        parse_error(const std::string& what, uint32_t line) :
+            std::runtime_error("JSON parse error: " + what + " (line " + std::to_string(line) + ")") {}
     };
 
-    /// ParameterError is a logical error regarding a parameter.
-    class ParameterError : public std::logic_error {
+    /// parameter_error is a logical error regarding a parameter.
+    class parameter_error : public std::logic_error {
         public:
-            ParameterError(const std::string& what) : std::logic_error(what) {}
+        parameter_error(const std::string& what) : std::logic_error(what) {}
     };
 
-    /// Split separates a stream of events into a stream of change detections and a stream of theshold crossings.
-    template <typename HandleChangeDetection, typename HandleThresholdCrossing>
-    class Split {
-        public:
-            Split(HandleChangeDetection handleChangeDetection, HandleThresholdCrossing handleThresholdCrossing) :
-                _handleChangeDetection(std::forward<HandleChangeDetection>(handleChangeDetection)),
-                _handleThresholdCrossing(std::forward<HandleThresholdCrossing>(handleThresholdCrossing))
-            {
-            }
-            Split(const Split&) = delete;
-            Split(Split&&) = default;
-            Split& operator=(const Split&) = delete;
-            Split& operator=(Split&&) = default;
-            virtual ~Split() {}
-
-            /// operator() handles an event.
-            virtual void operator()(AtisEvent atisEvent) {
-                if (atisEvent.isThresholdCrossing) {
-                    _handleThresholdCrossing(ThresholdCrossing{atisEvent.x, atisEvent.y, atisEvent.timestamp, atisEvent.polarity});
-                } else {
-                    _handleChangeDetection(DvsEvent{atisEvent.x, atisEvent.y, atisEvent.timestamp, atisEvent.polarity});
-                }
-            }
-
-        protected:
-            HandleChangeDetection _handleChangeDetection;
-            HandleThresholdCrossing _handleThresholdCrossing;
-    };
-
-    /// make_split creates a Split from functors.
-    template <typename HandleChangeDetection, typename HandleThresholdCrossing>
-    Split<HandleChangeDetection, HandleThresholdCrossing> make_split(
-        HandleChangeDetection handleChangeDetection,
-        HandleThresholdCrossing handleThresholdCrossing
-    ) {
-        return Split<HandleChangeDetection, HandleThresholdCrossing>(
-            std::forward<HandleChangeDetection>(handleChangeDetection),
-            std::forward<HandleThresholdCrossing>(handleThresholdCrossing)
-        );
+    /// write_header writes the header bytes to an byte stream.
+    inline void write_header(std::ostream& event_stream, uint8_t event_type) {
+            event_stream.write("Event Stream", 12);
+            event_stream.write(reinterpret_cast<char*>(version().data()), version().size());
+            event_stream.put(*reinterpret_cast<char*>(&event_type));
     }
 
-    /// EventStreamObservable is a base class for event stream observables.
-    class EventStreamObservable {
+    /// read_header consumes the header bytes from a bytes stream.
+    inline void read_header(const std::string& filename, std::istream& event_stream, uint8_t expected_event_type) {
+        {
+            std::string read_signature("Event Stream");
+            event_stream.read(&read_signature[0], read_signature.size());
+            if (event_stream.eof() || read_signature != "Event Stream") {
+                throw wrong_signature(filename);
+            }
+        }
+        {
+            std::array<uint8_t, 3> event_stream_version;
+            event_stream.read(reinterpret_cast<char*>(event_stream_version.data()), event_stream_version.size());
+            if (event_stream.eof() || std::get<0>(event_stream_version) != std::get<0>(version())
+                || std::get<1>(event_stream_version) < std::get<1>(version())) {
+                throw unsupported_version(filename);
+            }
+        }
+        {
+            const char raw_event_type = event_stream.get();
+            if (*reinterpret_cast<const uint8_t*>(&raw_event_type) != expected_event_type) {
+                throw unsupported_event_type(filename);
+            }
+        }
+    }
+
+    /// split separates a stream of events into a stream of change detections and a stream of theshold crossings.
+    template <typename handle_dvs_event_t, typename handle_threshold_crossing_t>
+    class split {
         public:
+        split(handle_dvs_event_t handle_dvs_event, handle_threshold_crossing_t handle_threshold_crossing) :
+            _handle_dvs_event(std::forward<handle_dvs_event_t>(handle_dvs_event)),
+            _handle_threshold_crossing(std::forward<handle_threshold_crossing_t>(handle_threshold_crossing)) {}
+        split(const split&) = delete;
+        split(split&&) = default;
+        split& operator=(const split&) = delete;
+        split& operator=(split&&) = default;
+        virtual ~split() {}
 
-            /// Dispatch specifies when the events are dispatched.
-            enum class Dispatch {
-                synchronouslyButSkipOffset,
-                synchronously,
-                asFastAsPossible,
-            };
-
-            EventStreamObservable() {}
-            EventStreamObservable(const EventStreamObservable&) = delete;
-            EventStreamObservable(EventStreamObservable&&) = default;
-            EventStreamObservable& operator=(const EventStreamObservable&) = delete;
-            EventStreamObservable& operator=(EventStreamObservable&&) = default;
-            virtual ~EventStreamObservable() {}
+        /// operator() handles an event.
+        virtual void operator()(atis_event_t atis_event) {
+            if (atis_event.is_threshold_crossing) {
+                _handle_threshold_crossing(
+                    threshold_crossing_t{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
+            } else {
+                _handle_dvs_event(dvs_event_t{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
+            }
+        }
 
         protected:
+        handle_dvs_event_t _handle_dvs_event;
+        handle_threshold_crossing_t _handle_threshold_crossing;
+    };
 
-            /// readAndDispatch implements a generic dispatch mechanism for event stream files.
-            template <typename Event, typename HandleByte, typename MustRestart, typename HandleEvent, typename HandleException>
-            static void readAndDispatch(
-                std::ifstream& eventStream,
-                std::atomic_bool& running,
-                EventStreamObservable::Dispatch dispatch,
-                std::size_t chunkSize,
-                HandleByte handleByte,
-                MustRestart mustRestart,
-                HandleEvent handleEvent,
-                HandleException handleException
-            ) {
-                try {
-                    Event event;
-                    auto bytes = std::vector<uint8_t>(chunkSize);
-                    switch (dispatch) {
-                        case EventStreamObservable::Dispatch::synchronouslyButSkipOffset: {
-                            auto offsetSkipped = false;
-                            auto timeReference = std::chrono::system_clock::now();
-                            uint64_t initialTimestamp = 0;
-                            uint64_t previousTimestamp = 0;
-                            while (running.load(std::memory_order_relaxed)) {
-                                eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-                                if (eventStream.eof()) {
-                                    for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), eventStream.gcount()); ++byteIterator) {
-                                        if (handleByte(*byteIterator, event)) {
-                                            if (offsetSkipped) {
-                                                if (event.timestamp > previousTimestamp) {
-                                                    previousTimestamp = event.timestamp;
-                                                    std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
-                                                }
-                                            } else {
-                                                offsetSkipped = true;
-                                                initialTimestamp = event.timestamp;
-                                                previousTimestamp = event.timestamp;
-                                            }
-                                            handleEvent(event);
-                                        }
-                                    }
-                                    if (mustRestart()) {
-                                        eventStream.clear();
-                                        eventStream.seekg(15);
-                                        offsetSkipped = false;
-                                        handleByte.reset();
-                                        timeReference = std::chrono::system_clock::now();
-                                        continue;
-                                    }
-                                    throw EndOfFile();
-                                }
-                                for (auto byte : bytes) {
-                                    if (handleByte(byte, event)) {
-                                        if (offsetSkipped) {
-                                            if (event.timestamp > previousTimestamp) {
-                                                previousTimestamp = event.timestamp;
-                                                std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp - initialTimestamp));
+    /// make_split creates a split from functors.
+    template <typename handle_dvs_event_t, typename handle_threshold_crossing_t>
+    split<handle_dvs_event_t, handle_threshold_crossing_t>
+    make_split(handle_dvs_event_t handle_dvs_event, handle_threshold_crossing_t handle_threshold_crossing) {
+        return split<handle_dvs_event_t, handle_threshold_crossing_t>(
+            std::forward<handle_dvs_event_t>(handle_dvs_event),
+            std::forward<handle_threshold_crossing_t>(handle_threshold_crossing));
+    }
+
+    /// event_stream_observable is a base class for event stream observables.
+    class event_stream_observable {
+        public:
+        /// dispatch specifies when the events are dispatched.
+        enum class dispatch {
+            synchronously_but_skip_offset,
+            synchronously,
+            as_fast_as_possible,
+        };
+
+        event_stream_observable() {}
+        event_stream_observable(const event_stream_observable&) = delete;
+        event_stream_observable(event_stream_observable&&) = default;
+        event_stream_observable& operator=(const event_stream_observable&) = delete;
+        event_stream_observable& operator=(event_stream_observable&&) = default;
+        virtual ~event_stream_observable() {}
+
+        protected:
+        /// read_and_dispatch implements a generic dispatch mechanism for event stream files.
+        template <
+            typename event_t,
+            typename handle_byte_t,
+            typename must_restart_t,
+            typename handle_event_t,
+            typename handle_exception_t>
+        static void read_and_dispatch(
+            std::ifstream& event_stream,
+            std::atomic_bool& running,
+            event_stream_observable::dispatch dispatch,
+            std::size_t chunk_size,
+            handle_byte_t handle_byte,
+            must_restart_t must_restart,
+            handle_event_t handle_event,
+            handle_exception_t handle_exception) {
+            try {
+                event_t event;
+                std::vector<uint8_t> bytes(chunk_size);
+                switch (dispatch) {
+                    case event_stream_observable::dispatch::synchronously_but_skip_offset: {
+                        auto offset_skipped = false;
+                        auto time_reference = std::chrono::system_clock::now();
+                        uint64_t initial_timestamp = 0;
+                        uint64_t previous_timestamp = 0;
+                        while (running.load(std::memory_order_relaxed)) {
+                            event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                            if (event_stream.eof()) {
+                                for (auto byte_iterator = bytes.begin();
+                                     byte_iterator != std::next(bytes.begin(), event_stream.gcount());
+                                     ++byte_iterator) {
+                                    if (handle_byte(*byte_iterator, event)) {
+                                        if (offset_skipped) {
+                                            if (event.t > previous_timestamp) {
+                                                previous_timestamp = event.t;
+                                                std::this_thread::sleep_until(
+                                                    time_reference
+                                                    + std::chrono::microseconds(event.t - initial_timestamp));
                                             }
                                         } else {
-                                            offsetSkipped = true;
-                                            initialTimestamp = event.timestamp;
-                                            previousTimestamp = event.timestamp;
+                                            offset_skipped = true;
+                                            initial_timestamp = event.t;
+                                            previous_timestamp = event.t;
                                         }
-                                        handleEvent(event);
+                                        handle_event(event);
                                     }
+                                }
+                                if (must_restart()) {
+                                    event_stream.clear();
+                                    event_stream.seekg(15);
+                                    offset_skipped = false;
+                                    handle_byte.reset();
+                                    time_reference = std::chrono::system_clock::now();
+                                    continue;
+                                }
+                                throw end_of_file();
+                            }
+                            for (auto byte : bytes) {
+                                if (handle_byte(byte, event)) {
+                                    if (offset_skipped) {
+                                        if (event.t > previous_timestamp) {
+                                            previous_timestamp = event.t;
+                                            std::this_thread::sleep_until(
+                                                time_reference
+                                                + std::chrono::microseconds(event.t - initial_timestamp));
+                                        }
+                                    } else {
+                                        offset_skipped = true;
+                                        initial_timestamp = event.t;
+                                        previous_timestamp = event.t;
+                                    }
+                                    handle_event(event);
                                 }
                             }
                         }
-                        case EventStreamObservable::Dispatch::synchronously: {
-                            auto timeReference = std::chrono::system_clock::now();
-                            uint64_t previousTimestamp = 0;
-                            while (running.load(std::memory_order_relaxed)) {
-                                eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-                                if (eventStream.eof()) {
-                                    for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), eventStream.gcount()); ++byteIterator) {
-                                        if (handleByte(*byteIterator, event)) {
-                                            if (event.timestamp > previousTimestamp) {
-                                                std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
-                                            }
-                                            previousTimestamp = event.timestamp;
-                                            handleEvent(event);
+                    }
+                    case event_stream_observable::dispatch::synchronously: {
+                        auto time_reference = std::chrono::system_clock::now();
+                        uint64_t previous_timestamp = 0;
+                        while (running.load(std::memory_order_relaxed)) {
+                            event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                            if (event_stream.eof()) {
+                                for (auto byte_iterator = bytes.begin();
+                                     byte_iterator != std::next(bytes.begin(), event_stream.gcount());
+                                     ++byte_iterator) {
+                                    if (handle_byte(*byte_iterator, event)) {
+                                        if (event.t > previous_timestamp) {
+                                            std::this_thread::sleep_until(
+                                                time_reference + std::chrono::microseconds(event.t));
                                         }
+                                        previous_timestamp = event.t;
+                                        handle_event(event);
                                     }
-                                    if (mustRestart()) {
-                                        eventStream.clear();
-                                        eventStream.seekg(15);
-                                        handleByte.reset();
-                                        timeReference = std::chrono::system_clock::now();
-                                        continue;
-                                    }
-                                    throw EndOfFile();
                                 }
-                                for (auto byte : bytes) {
-                                    if (handleByte(byte, event)) {
-                                        if (event.timestamp > previousTimestamp) {
-                                            std::this_thread::sleep_until(timeReference + std::chrono::microseconds(event.timestamp));
-                                        }
-                                        previousTimestamp = event.timestamp;
-                                        handleEvent(event);
+                                if (must_restart()) {
+                                    event_stream.clear();
+                                    event_stream.seekg(15);
+                                    handle_byte.reset();
+                                    time_reference = std::chrono::system_clock::now();
+                                    continue;
+                                }
+                                throw end_of_file();
+                            }
+                            for (auto byte : bytes) {
+                                if (handle_byte(byte, event)) {
+                                    if (event.t > previous_timestamp) {
+                                        std::this_thread::sleep_until(
+                                            time_reference + std::chrono::microseconds(event.t));
                                     }
+                                    previous_timestamp = event.t;
+                                    handle_event(event);
                                 }
                             }
                         }
-                        case EventStreamObservable::Dispatch::asFastAsPossible: {
-                            while (running.load(std::memory_order_relaxed)) {
-                                eventStream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-                                if (eventStream.eof()) {
-                                    for (auto byteIterator = bytes.begin(); byteIterator != std::next(bytes.begin(), eventStream.gcount()); ++byteIterator) {
-                                        if (handleByte(*byteIterator, event)) {
-                                            handleEvent(event);
-                                        }
+                    }
+                    case event_stream_observable::dispatch::as_fast_as_possible: {
+                        while (running.load(std::memory_order_relaxed)) {
+                            event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                            if (event_stream.eof()) {
+                                for (auto byte_iterator = bytes.begin();
+                                     byte_iterator != std::next(bytes.begin(), event_stream.gcount());
+                                     ++byte_iterator) {
+                                    if (handle_byte(*byte_iterator, event)) {
+                                        handle_event(event);
                                     }
-                                    if (mustRestart()) {
-                                        eventStream.clear();
-                                        eventStream.seekg(15);
-                                        handleByte.reset();
-                                        continue;
-                                    }
-                                    throw EndOfFile();
                                 }
-                                for (auto byte : bytes) {
-                                    if (handleByte(byte, event)) {
-                                        handleEvent(event);
-                                    }
+                                if (must_restart()) {
+                                    event_stream.clear();
+                                    event_stream.seekg(15);
+                                    handle_byte.reset();
+                                    continue;
+                                }
+                                throw end_of_file();
+                            }
+                            for (auto byte : bytes) {
+                                if (handle_byte(byte, event)) {
+                                    handle_event(event);
                                 }
                             }
+                        }
+                    }
+                }
+            } catch (...) {
+                handle_exception(std::current_exception());
+            }
+        }
+    };
+
+    /// capture_exception_t stores an exception pointer and notifies a condition variable.
+    /// It is used internally by join_ functions.
+    class capture_exception_t {
+        public:
+        capture_exception_t() {}
+        capture_exception_t(const capture_exception_t&) = delete;
+        capture_exception_t(capture_exception_t&&) = default;
+        capture_exception_t& operator=(const capture_exception_t&) = delete;
+        capture_exception_t& operator=(capture_exception_t&&) = default;
+        virtual ~capture_exception_t() {}
+
+        /// operator() handles an exception.
+        virtual void operator()(std::exception_ptr exception) {
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                _exception = exception;
+            }
+            _condition_variable.notify_one();
+        }
+
+        /// lock blocks until the held exception is set.
+        virtual void lock() {
+            std::unique_lock<std::mutex> exception_lock(_mutex);
+            if (_exception == nullptr) {
+                _condition_variable.wait(exception_lock, [&] { return _exception != nullptr; });
+            }
+        }
+
+        /// throw_if_not_end_of_file raises the internally held exception if it is not an end-of-file exception.
+        virtual void throw_if_not_end_of_file() {
+            try {
+                std::rethrow_exception(_exception);
+            } catch (const end_of_file&) {
+                return;
+            }
+        }
+
+        protected:
+        std::mutex _mutex;
+        std::condition_variable _condition_variable;
+        std::exception_ptr _exception;
+    };
+
+    /// generic_event_stream_writer writes events to a generic Event Stream file.
+    class generic_event_stream_writer {
+        public:
+        generic_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+        generic_event_stream_writer(const generic_event_stream_writer&) = delete;
+        generic_event_stream_writer(generic_event_stream_writer&&) = default;
+        generic_event_stream_writer& operator=(const generic_event_stream_writer&) = delete;
+        generic_event_stream_writer& operator=(generic_event_stream_writer&&) = default;
+        virtual ~generic_event_stream_writer() {}
+
+        /// operator() handles an event.
+        virtual void operator()(generic_event_t generic_event) {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                auto relative_timestamp = generic_event.t - _previous_timestamp;
+                if (relative_timestamp >= 127) {
+                    const auto number_of_overflows = relative_timestamp / 127;
+                    for (std::size_t index = 0; index < number_of_overflows; ++index) {
+                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                    }
+                    relative_timestamp -= number_of_overflows * 127;
+                }
+                _event_stream.put(
+                    static_cast<uint8_t>(relative_timestamp)
+                    | static_cast<uint8_t>((generic_event.extra_bit ? 0b1 : 0b0) << 7));
+                _event_stream.put(static_cast<uint8_t>(generic_event.data & 0x00000000000000ff));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x000000000000ff00) >> 8));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x0000000000ff0000) >> 16));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x00000000ff000000) >> 24));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x0000000ff0000000) >> 32));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x0000ff0000000000) >> 40));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x00ff000000000000) >> 48));
+                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0xff00000000000000) >> 56));
+                _previous_timestamp = generic_event.t;
+            }
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// open is a thread-safe method to start logging events to the given file.
+        virtual void open(const std::string& filename) {
+            _event_stream.open(filename, std::ifstream::binary);
+            if (!_event_stream.good()) {
+                throw unwritable_file(filename);
+            }
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Already logging");
+            }
+            write_header(_event_stream, 0);
+            _logging = true;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// close is a thread-safe method to stop logging the events and close the file.
+        virtual void close() {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (!_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Was not logging");
+            }
+            _logging = false;
+            _event_stream.close();
+            _previous_timestamp = 0;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        protected:
+        std::ofstream _event_stream;
+        bool _logging;
+        std::atomic_flag _accessing_event_stream;
+        uint64_t _previous_timestamp;
+    };
+
+    /// handle_generic_byte implements the event stream state machine for generic events.
+    class handle_generic_byte {
+        public:
+        handle_generic_byte() : _state(state::idle), _generic_event(generic_event_t{0, 0, false}) {}
+        handle_generic_byte(const handle_generic_byte&) = default;
+        handle_generic_byte(handle_generic_byte&&) = default;
+        handle_generic_byte& operator=(const handle_generic_byte&) = default;
+        handle_generic_byte& operator=(handle_generic_byte&&) = default;
+        virtual ~handle_generic_byte() {}
+
+        /// operator() handles a byte.
+        virtual bool operator()(uint8_t byte, generic_event_t& generic_event) {
+            switch (_state) {
+                case state::idle: {
+                    if ((byte & 0b1111111) == 0b1111111) {
+                        _generic_event.t += ((byte & 0b10000000) >> 7) * 127;
+                    } else {
+                        _generic_event.t = _generic_event.t + (byte & 0b1111111);
+                        _generic_event.extra_bit = ((byte & 0b10000000) >> 7) == 1;
+                        _state = state::byte0;
+                    }
+                    return false;
+                }
+                case state::byte0: {
+                    _generic_event.data = byte;
+                    _state = state::byte1;
+                    return false;
+                }
+                case state::byte1: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 8;
+                    _state = state::byte2;
+                    return false;
+                }
+                case state::byte2: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 16;
+                    _state = state::byte3;
+                    return false;
+                }
+                case state::byte3: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
+                    _state = state::byte4;
+                    return false;
+                }
+                case state::byte4: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
+                    _state = state::byte5;
+                    return false;
+                }
+                case state::byte5: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
+                    _state = state::byte6;
+                    return false;
+                }
+                case state::byte6: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
+                    _state = state::byte7;
+                    return false;
+                }
+                case state::byte7: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
+                    _state = state::byte8;
+                    return false;
+                }
+                case state::byte8: {
+                    _generic_event.data |= static_cast<uint64_t>(byte) << 56;
+                    _state = state::idle;
+                    generic_event = _generic_event;
+                    return true;
+                }
+            }
+        }
+
+        /// reset initialises the state machine.
+        virtual void reset() {
+            _state = state::idle;
+            _generic_event.t = 0;
+        }
+
+        protected:
+        /// state represents the current state machine's state.
+        enum class state {
+            idle,
+            byte0,
+            byte1,
+            byte2,
+            byte3,
+            byte4,
+            byte5,
+            byte6,
+            byte7,
+            byte8,
+        };
+
+        state _state;
+        generic_event_t _generic_event;
+    };
+
+    /// generic_event_stream_observable is a template-specialised event_stream_observable for generic events.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    class generic_event_stream_observable : public event_stream_observable {
+        public:
+        generic_event_stream_observable(
+            const std::string& filename,
+            handle_event_t handle_event,
+            handle_exception_t handle_exception,
+            must_restart_t must_restart,
+            event_stream_observable::dispatch dispatch,
+            std::size_t chunk_size) :
+            _event_stream(filename, std::ifstream::binary),
+            _running(true) {
+            if (!_event_stream.good()) {
+                throw unreadable_file(filename);
+            }
+            read_header(filename, _event_stream, 0);
+            _loop = std::thread(
+                read_and_dispatch<
+                    generic_event_t,
+                    handle_generic_byte,
+                    must_restart_t,
+                    handle_event_t,
+                    handle_exception_t>,
+                std::ref(_event_stream),
+                std::ref(_running),
+                dispatch,
+                chunk_size,
+                handle_generic_byte(),
+                std::forward<must_restart_t>(must_restart),
+                std::forward<handle_event_t>(handle_event),
+                std::forward<handle_exception_t>(handle_exception));
+        }
+        generic_event_stream_observable(const generic_event_stream_observable&) = delete;
+        generic_event_stream_observable(generic_event_stream_observable&&) = default;
+        generic_event_stream_observable& operator=(const generic_event_stream_observable&) = delete;
+        generic_event_stream_observable& operator=(generic_event_stream_observable&&) = default;
+        virtual ~generic_event_stream_observable() {
+            _running.store(false, std::memory_order_relaxed);
+            _loop.join();
+        }
+
+        protected:
+        std::ifstream _event_stream;
+        std::atomic_bool _running;
+        std::thread _loop;
+    };
+
+    /// make_generic_event_stream_observable creates an event stream observable from functors.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
+    std::unique_ptr<generic_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    make_generic_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        handle_exception_t handle_exception,
+        must_restart_t must_restart = &false_function,
+        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
+        std::size_t chunk_size = 1 << 10) {
+        return sepia::make_unique<generic_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::forward<handle_exception_t>(handle_exception),
+            std::forward<must_restart_t>(must_restart),
+            dispatch,
+            chunk_size);
+    }
+
+    /// join_generic_event_stream_observable creates an event stream observable from functors and blocks until the end
+    /// of the input file is reached.
+    template <typename handle_event_t>
+    void join(const std::string& filename, handle_event_t handle_event, std::size_t chunk_size = 1 << 10) {
+        capture_exception_t capture_exception;
+        auto generic_event_stream_observable = make_generic_event_stream_observable(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::ref(capture_exception),
+            &false_function,
+            event_stream_observable::dispatch::as_fast_as_possible,
+            chunk_size);
+        capture_exception.lock();
+        capture_exception.throw_if_not_end_of_file();
+    }
+
+    /// dvs_event_stream_writer writes events to an Event Stream file.
+    class dvs_event_stream_writer {
+        public:
+        dvs_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+        dvs_event_stream_writer(const dvs_event_stream_writer&) = delete;
+        dvs_event_stream_writer(dvs_event_stream_writer&&) = default;
+        dvs_event_stream_writer& operator=(const dvs_event_stream_writer&) = delete;
+        dvs_event_stream_writer& operator=(dvs_event_stream_writer&&) = default;
+        virtual ~dvs_event_stream_writer() {}
+
+        /// operator() handles an event.
+        virtual void operator()(dvs_event_t dvs_event) {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                auto relative_timestamp = dvs_event.t - _previous_timestamp;
+                if (relative_timestamp >= 15) {
+                    const auto number_of_overflows = relative_timestamp / 15;
+                    for (std::size_t index = 0; index < number_of_overflows / 15; ++index) {
+                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                    }
+                    const auto number_of_overflows_left = number_of_overflows % 15;
+                    if (number_of_overflows_left > 0) {
+                        _event_stream.put(
+                            static_cast<uint8_t>(0b1111) | static_cast<uint8_t>(number_of_overflows_left << 4));
+                    }
+                    relative_timestamp -= number_of_overflows * 15;
+                }
+                _event_stream.put(
+                    static_cast<uint8_t>(relative_timestamp) | static_cast<uint8_t>((dvs_event.x & 0b1111) << 4));
+                _event_stream.put(
+                    static_cast<uint8_t>((dvs_event.x & 0b1111110000) >> 4)
+                    | static_cast<uint8_t>((dvs_event.y & 0b11) << 6));
+                _event_stream.put(
+                    static_cast<uint8_t>((dvs_event.y & 0b111111100) >> 2)
+                    | static_cast<uint8_t>(dvs_event.is_increase ? 0b10000000 : 0));
+                _previous_timestamp = dvs_event.t;
+            }
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// open is a thread-safe method to start logging events to the given file.
+        virtual void open(const std::string& filename) {
+            _event_stream.open(filename, std::ifstream::binary);
+            if (!_event_stream.good()) {
+                throw unwritable_file(filename);
+            }
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Already logging");
+            }
+            write_header(_event_stream, 1);
+            _logging = true;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// close is a thread-safe method to stop logging the events and close the file.
+        virtual void close() {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (!_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Was not logging");
+            }
+            _logging = false;
+            _event_stream.close();
+            _previous_timestamp = 0;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        protected:
+        std::ofstream _event_stream;
+        bool _logging;
+        std::atomic_flag _accessing_event_stream;
+        uint64_t _previous_timestamp;
+    };
+
+    /// handle_dvs_byte implements the event stream state machine for DVS events.
+    class handle_dvs_byte {
+        public:
+        handle_dvs_byte() : _state(state::idle), _dvs_event(dvs_event_t{0, 0, 0, false}) {}
+        handle_dvs_byte(const handle_dvs_byte&) = default;
+        handle_dvs_byte(handle_dvs_byte&&) = default;
+        handle_dvs_byte& operator=(const handle_dvs_byte&) = default;
+        handle_dvs_byte& operator=(handle_dvs_byte&&) = default;
+        virtual ~handle_dvs_byte() {}
+
+        /// operator() handles a byte.
+        virtual bool operator()(uint8_t byte, dvs_event_t& dvs_event) {
+            switch (_state) {
+                case state::idle: {
+                    if ((byte & 0b1111) == 0b1111) {
+                        _dvs_event.t += ((byte & 0b11110000) >> 4) * 15;
+                    } else {
+                        _dvs_event.t = _dvs_event.t + (byte & 0b1111);
+                        _dvs_event.x = ((byte & 0b11110000) >> 4);
+                        _state = state::byte0;
+                    }
+                    return false;
+                }
+                case state::byte0: {
+                    _dvs_event.x |= (static_cast<uint16_t>(byte & 0b111111) << 4);
+                    _dvs_event.y = ((byte & 0b11000000) >> 6);
+                    _state = state::byte1;
+                    return false;
+                }
+                case state::byte1: {
+                    _dvs_event.y |= (static_cast<uint16_t>(byte & 0b1111111) << 2);
+                    _dvs_event.is_increase = (((byte & 0b10000000) >> 7) == 1);
+                    _state = state::idle;
+                    dvs_event = _dvs_event;
+                    return true;
+                }
+            }
+        }
+
+        /// reset initialises the state machine.
+        virtual void reset() {
+            _state = state::idle;
+        }
+
+        protected:
+        /// state_t represents the current state machine's state.
+        enum class state {
+            idle,
+            byte0,
+            byte1,
+        };
+
+        state _state;
+        dvs_event_t _dvs_event;
+    };
+
+    /// dvs_event_stream_observable is a template-specialised event_stream_observable for DVS events.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    class dvs_event_stream_observable : public event_stream_observable {
+        public:
+        dvs_event_stream_observable(
+            const std::string& filename,
+            handle_event_t handle_event,
+            handle_exception_t handle_exception,
+            must_restart_t must_restart,
+            event_stream_observable::dispatch dispatch,
+            std::size_t chunk_size) :
+            _event_stream(filename, std::ifstream::binary),
+            _running(true) {
+            if (!_event_stream.good()) {
+                throw unreadable_file(filename);
+            }
+            read_header(filename, _event_stream, 1);
+            _loop = std::thread(
+                read_and_dispatch<dvs_event_t, handle_dvs_byte, must_restart_t, handle_event_t, handle_exception_t>,
+                std::ref(_event_stream),
+                std::ref(_running),
+                dispatch,
+                chunk_size,
+                handle_dvs_byte(),
+                std::forward<must_restart_t>(must_restart),
+                std::forward<handle_event_t>(handle_event),
+                std::forward<handle_exception_t>(handle_exception));
+        }
+        dvs_event_stream_observable(const dvs_event_stream_observable&) = delete;
+        dvs_event_stream_observable(dvs_event_stream_observable&&) = default;
+        dvs_event_stream_observable& operator=(const dvs_event_stream_observable&) = delete;
+        dvs_event_stream_observable& operator=(dvs_event_stream_observable&&) = default;
+        virtual ~dvs_event_stream_observable() {
+            _running.store(false, std::memory_order_relaxed);
+            _loop.join();
+        }
+
+        protected:
+        std::ifstream _event_stream;
+        std::atomic_bool _running;
+        std::thread _loop;
+    };
+
+    /// make_dvs_event_stream_observable creates an event stream observable from functors.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
+    std::unique_ptr<dvs_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    make_dvs_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        handle_exception_t handle_exception,
+        must_restart_t must_restart = &false_function,
+        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
+        std::size_t chunk_size = 1 << 10) {
+        return sepia::make_unique<dvs_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::forward<handle_exception_t>(handle_exception),
+            std::forward<must_restart_t>(must_restart),
+            dispatch,
+            chunk_size);
+    }
+
+    /// join_dvs_event_stream_observable creates an event stream observable from functors and blocks until the end of
+    /// the input file is reached.
+    template <typename handle_event_t>
+    void join_dvs_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        std::size_t chunk_size = 1 << 10) {
+        capture_exception_t capture_exception;
+        auto dvs_event_stream_observable = make_dvs_event_stream_observable(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::ref(capture_exception),
+            &false_function,
+            event_stream_observable::dispatch::as_fast_as_possible,
+            chunk_size);
+        capture_exception.lock();
+        capture_exception.throw_if_not_end_of_file();
+    }
+
+    /// atis_event_stream_writer writes events to an Event Stream file.
+    class atis_event_stream_writer {
+        public:
+        atis_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+        atis_event_stream_writer(const atis_event_stream_writer&) = delete;
+        atis_event_stream_writer(atis_event_stream_writer&&) = default;
+        atis_event_stream_writer& operator=(const atis_event_stream_writer&) = delete;
+        atis_event_stream_writer& operator=(atis_event_stream_writer&&) = default;
+        virtual ~atis_event_stream_writer() {}
+
+        /// operator() handles an event.
+        virtual void operator()(atis_event_t atis_event) {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                auto relative_timestamp = atis_event.t - _previous_timestamp;
+                if (relative_timestamp >= 31) {
+                    const auto number_of_overflows = relative_timestamp / 31;
+                    for (std::size_t index = 0; index < number_of_overflows / 7; ++index) {
+                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                    }
+                    const auto number_of_overflows_left = number_of_overflows % 7;
+                    if (number_of_overflows_left > 0) {
+                        _event_stream.put(
+                            static_cast<uint8_t>(0b11111) | static_cast<uint8_t>(number_of_overflows_left << 5));
+                    }
+                    relative_timestamp -= number_of_overflows * 31;
+                }
+                _event_stream.put(
+                    static_cast<uint8_t>(relative_timestamp) | static_cast<uint8_t>((atis_event.x & 0b111) << 5));
+                _event_stream.put(
+                    static_cast<uint8_t>((atis_event.x & 0b111111000) >> 3)
+                    | static_cast<uint8_t>((atis_event.y & 0b11) << 6));
+                _event_stream.put(
+                    static_cast<uint8_t>((atis_event.y & 0b11111100) >> 2)
+                    | static_cast<uint8_t>(atis_event.is_threshold_crossing ? 0b1000000 : 0)
+                    | static_cast<uint8_t>(atis_event.polarity ? 0b10000000 : 0));
+                _previous_timestamp = atis_event.t;
+            }
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// open is a thread-safe method to start logging events to the given file.
+        virtual void open(const std::string& filename) {
+            _event_stream.open(filename, std::ifstream::binary);
+            if (!_event_stream.good()) {
+                throw unwritable_file(filename);
+            }
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Already logging");
+            }
+            write_header(_event_stream, 2);
+            _logging = true;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// close is a thread-safe method to stop logging the events and close the file.
+        virtual void close() {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (!_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Was not logging");
+            }
+            _logging = false;
+            _event_stream.close();
+            _previous_timestamp = 0;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        protected:
+        std::ofstream _event_stream;
+        bool _logging;
+        std::atomic_flag _accessing_event_stream;
+        uint64_t _previous_timestamp;
+    };
+
+    /// handle_atis_byte implements the event stream state machine for ATIS events.
+    class handle_atis_byte {
+        public:
+        handle_atis_byte() : _state(state::idle), _atis_event(atis_event_t{0, 0, 0, false, false}) {}
+        handle_atis_byte(const handle_atis_byte&) = default;
+        handle_atis_byte(handle_atis_byte&&) = default;
+        handle_atis_byte& operator=(const handle_atis_byte&) = default;
+        handle_atis_byte& operator=(handle_atis_byte&&) = default;
+        virtual ~handle_atis_byte() {}
+
+        /// operator() handles a byte.
+        virtual bool operator()(uint8_t byte, atis_event_t& atis_event) {
+            switch (_state) {
+                case state::idle: {
+                    if ((byte & 0b11111) == 0b11111) {
+                        _atis_event.t += ((byte & 0b11100000) >> 5) * 31;
+                    } else {
+                        _atis_event.t = _atis_event.t + (byte & 0b11111);
+                        _atis_event.x = ((byte & 0b11100000) >> 5);
+                        _state = state::byte0;
+                    }
+                    return false;
+                }
+                case state::byte0: {
+                    _atis_event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
+                    _atis_event.y = ((byte & 0b11000000) >> 6);
+                    _state = state::byte1;
+                    return false;
+                }
+                case state::byte1: {
+                    _atis_event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
+                    _atis_event.is_threshold_crossing = (((byte & 0b1000000) >> 6) == 1);
+                    _atis_event.polarity = (((byte & 0b10000000) >> 7) == 1);
+                    _state = state::idle;
+                    atis_event = _atis_event;
+                    return true;
+                }
+            }
+        }
+
+        /// reset initialises the state machine.
+        virtual void reset() {
+            _state = state::idle;
+            _atis_event.t = 0;
+        }
+
+        protected:
+        /// state represents the current state machine's state.
+        enum class state {
+            idle,
+            byte0,
+            byte1,
+        };
+
+        state _state;
+        atis_event_t _atis_event;
+    };
+
+    /// atis_event_stream_observable is a template-specialised event_stream_observable for ATIS events.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    class atis_event_stream_observable : public event_stream_observable {
+        public:
+        atis_event_stream_observable(
+            const std::string& filename,
+            handle_event_t handle_event,
+            handle_exception_t handle_exception,
+            must_restart_t must_restart,
+            event_stream_observable::dispatch dispatch,
+            std::size_t chunk_size) :
+            _event_stream(filename, std::ifstream::binary),
+            _running(true) {
+            if (!_event_stream.good()) {
+                throw unreadable_file(filename);
+            }
+            read_header(filename, _event_stream, 2);
+            _loop = std::thread(
+                read_and_dispatch<atis_event_t, handle_atis_byte, must_restart_t, handle_event_t, handle_exception_t>,
+                std::ref(_event_stream),
+                std::ref(_running),
+                dispatch,
+                chunk_size,
+                handle_atis_byte(),
+                std::forward<must_restart_t>(must_restart),
+                std::forward<handle_event_t>(handle_event),
+                std::forward<handle_exception_t>(handle_exception));
+        }
+        atis_event_stream_observable(const atis_event_stream_observable&) = delete;
+        atis_event_stream_observable(atis_event_stream_observable&&) = default;
+        atis_event_stream_observable& operator=(const atis_event_stream_observable&) = delete;
+        atis_event_stream_observable& operator=(atis_event_stream_observable&&) = default;
+        virtual ~atis_event_stream_observable() {
+            _running.store(false, std::memory_order_relaxed);
+            _loop.join();
+        }
+
+        protected:
+        std::ifstream _event_stream;
+        std::atomic_bool _running;
+        std::thread _loop;
+    };
+
+    /// make_atis_event_stream_observable creates an event stream observable from functors.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
+    std::unique_ptr<atis_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    make_atis_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        handle_exception_t handle_exception,
+        must_restart_t must_restart = &false_function,
+        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
+        std::size_t chunk_size = 1 << 10) {
+        return sepia::make_unique<atis_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::forward<handle_exception_t>(handle_exception),
+            std::forward<must_restart_t>(must_restart),
+            dispatch,
+            chunk_size);
+    }
+
+    /// join_atis_event_stream_observable creates an event stream observable from functors and blocks until the end of
+    /// the input file is reached.
+    template <typename handle_event_t>
+    void join_atis_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        std::size_t chunk_size = 1 << 10) {
+        capture_exception_t capture_exception;
+        auto atis_event_stream_observable = make_atis_event_stream_observable(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::ref(capture_exception),
+            &false_function,
+            event_stream_observable::dispatch::as_fast_as_possible,
+            chunk_size);
+        capture_exception.lock();
+        capture_exception.throw_if_not_end_of_file();
+    }
+
+    /// color_event_stream_writer writes events to a color Event Stream file.
+    class color_event_stream_writer {
+        public:
+        color_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+        color_event_stream_writer(const color_event_stream_writer&) = delete;
+        color_event_stream_writer(color_event_stream_writer&&) = default;
+        color_event_stream_writer& operator=(const color_event_stream_writer&) = delete;
+        color_event_stream_writer& operator=(color_event_stream_writer&&) = default;
+        virtual ~color_event_stream_writer() {}
+
+        /// operator() handles an event.
+        virtual void operator()(color_event_t color_event) {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                auto relative_timestamp = color_event.t - _previous_timestamp;
+                if (relative_timestamp >= 127) {
+                    const auto number_of_overflows = relative_timestamp / 127;
+                    for (std::size_t index = 0; index < number_of_overflows; ++index) {
+                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                    }
+                    relative_timestamp -= number_of_overflows * 127;
+                }
+                _event_stream.put(
+                    static_cast<uint8_t>(relative_timestamp) | static_cast<uint8_t>((color_event.x & 0b1) << 7));
+                _event_stream.put(static_cast<uint8_t>((color_event.x & 0b111111110) >> 1));
+                _event_stream.put(static_cast<uint8_t>(color_event.y));
+                _event_stream.put(color_event.r);
+                _event_stream.put(color_event.g);
+                _event_stream.put(color_event.b);
+                _previous_timestamp = color_event.t;
+            }
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// open is a thread-safe method to start logging events to the given file.
+        virtual void open(const std::string& filename) {
+            _event_stream.open(filename, std::ifstream::binary);
+            if (!_event_stream.good()) {
+                throw unwritable_file(filename);
+            }
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Already logging");
+            }
+            write_header(_event_stream, 4);
+            _logging = true;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// close is a thread-safe method to stop logging the events and close the file.
+        virtual void close() {
+            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
+            }
+            if (!_logging) {
+                _accessing_event_stream.clear(std::memory_order_release);
+                throw std::runtime_error("Was not logging");
+            }
+            _logging = false;
+            _event_stream.close();
+            _previous_timestamp = 0;
+            _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        protected:
+        std::ofstream _event_stream;
+        bool _logging;
+        std::atomic_flag _accessing_event_stream;
+        uint64_t _previous_timestamp;
+    };
+
+    /// handle_color_byte implements the event stream state machine for color events.
+    class handle_color_byte {
+        public:
+        handle_color_byte() : _state(state::idle), _color_event(color_event_t{0, 0, 0, 0, 0, 0}) {}
+        handle_color_byte(const handle_color_byte&) = default;
+        handle_color_byte(handle_color_byte&&) = default;
+        handle_color_byte& operator=(const handle_color_byte&) = default;
+        handle_color_byte& operator=(handle_color_byte&&) = default;
+        virtual ~handle_color_byte() {}
+
+        /// operator() handles a byte.
+        virtual bool operator()(uint8_t byte, color_event_t& color_event) {
+            switch (_state) {
+                case state::idle: {
+                    if ((byte & 0b1111111) == 0b1111111) {
+                        _color_event.t += ((byte & 0b10000000) >> 7) * 127;
+                    } else {
+                        _color_event.t = _color_event.t + (byte & 0b1111111);
+                        _color_event.x = ((byte & 0b10000000) >> 7);
+                        _state = state::byte0;
+                    }
+                    return false;
+                }
+                case state::byte0: {
+                    _color_event.x |= (static_cast<uint16_t>(byte) << 1);
+                    _state = state::byte1;
+                    return false;
+                }
+                case state::byte1: {
+                    _color_event.y = byte;
+                    _state = state::byte2;
+                    return false;
+                }
+                case state::byte2: {
+                    _color_event.r = byte;
+                    _state = state::byte3;
+                    return false;
+                }
+                case state::byte3: {
+                    _color_event.g = byte;
+                    _state = state::byte4;
+                    return false;
+                }
+                case state::byte4: {
+                    _color_event.b = byte;
+                    _state = state::idle;
+                    color_event = _color_event;
+                    return true;
+                }
+            }
+        }
+
+        /// reset initialises the state machine.
+        virtual void reset() {
+            _state = state::idle;
+            _color_event.t = 0;
+        }
+
+        protected:
+        /// state represents the current state machine's state.
+        enum class state {
+            idle,
+            byte0,
+            byte1,
+            byte2,
+            byte3,
+            byte4,
+        };
+
+        state _state;
+        color_event_t _color_event;
+    };
+
+    /// color_event_stream_observable is a template-specialised event_stream_observable for color events.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    class color_event_stream_observable : public event_stream_observable {
+        public:
+        color_event_stream_observable(
+            const std::string& filename,
+            handle_event_t handle_event,
+            handle_exception_t handle_exception,
+            must_restart_t must_restart,
+            event_stream_observable::dispatch dispatch,
+            std::size_t chunk_size) :
+            _event_stream(filename, std::ifstream::binary),
+            _running(true) {
+            if (!_event_stream.good()) {
+                throw unreadable_file(filename);
+            }
+            read_header(filename, _event_stream, 4);
+            _loop = std::thread(
+                read_and_dispatch<color_event_t, handle_color_byte, must_restart_t, handle_event_t, handle_exception_t>,
+                std::ref(_event_stream),
+                std::ref(_running),
+                dispatch,
+                chunk_size,
+                handle_color_byte(),
+                std::forward<must_restart_t>(must_restart),
+                std::forward<handle_event_t>(handle_event),
+                std::forward<handle_exception_t>(handle_exception));
+        }
+        color_event_stream_observable(const color_event_stream_observable&) = delete;
+        color_event_stream_observable(color_event_stream_observable&&) = default;
+        color_event_stream_observable& operator=(const color_event_stream_observable&) = delete;
+        color_event_stream_observable& operator=(color_event_stream_observable&&) = default;
+        virtual ~color_event_stream_observable() {
+            _running.store(false, std::memory_order_relaxed);
+            _loop.join();
+        }
+
+        protected:
+        std::ifstream _event_stream;
+        std::atomic_bool _running;
+        std::thread _loop;
+    };
+
+    /// make_color_event_stream_observable creates an event stream observable from functors.
+    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
+    std::unique_ptr<color_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    make_color_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        handle_exception_t handle_exception,
+        must_restart_t must_restart = &false_function,
+        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
+        std::size_t chunk_size = 1 << 10) {
+        return sepia::make_unique<color_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::forward<handle_exception_t>(handle_exception),
+            std::forward<must_restart_t>(must_restart),
+            dispatch,
+            chunk_size);
+    }
+
+    /// join_color_event_stream_observable creates an event stream observable from functors and blocks until the end of
+    /// the input file is reached.
+    template <typename handle_event_t>
+    void join_color_event_stream_observable(
+        const std::string& filename,
+        handle_event_t handle_event,
+        std::size_t chunk_size = 1 << 10) {
+        capture_exception_t capture_exception;
+        auto color_event_stream_observable = make_color_event_stream_observable(
+            filename,
+            std::forward<handle_event_t>(handle_event),
+            std::ref(capture_exception),
+            &false_function,
+            event_stream_observable::dispatch::as_fast_as_possible,
+            chunk_size);
+        capture_exception.lock();
+        capture_exception.throw_if_not_end_of_file();
+    }
+
+    /// Forward-declare base_parameter for referencing in unvalidated_parameter.
+    class base_parameter;
+
+    /// Forward-declare object_parameter and list_parameter for referencing in parameter.
+    class object_parameter;
+    class list_parameter;
+
+    /// base_parameter corresponds to a setting or a group of settings.
+    /// This class is used to validate the JSON parameters file, which is used to set the biases and other camera
+    /// parameters.
+    class base_parameter {
+        public:
+        base_parameter() = default;
+        base_parameter(const base_parameter&) = delete;
+        base_parameter(base_parameter&&) = default;
+        base_parameter& operator=(const base_parameter&) = delete;
+        base_parameter& operator=(base_parameter&&) = default;
+        virtual ~base_parameter(){};
+
+        /// get_list_parameter is used to retrieve a list parameter.
+        /// It must be given a vector of strings which contains the parameter key (or keys for nested object
+        /// parameters). An error is raised at runtime if the parameter is not a list.
+        virtual const list_parameter& get_list_parameter(const std::vector<std::string>& keys) const {
+            return get_list_parameter(keys.begin(), keys.end());
+        }
+
+        /// get_boolean is used to retrieve a boolean parameter.
+        /// It must be given a vector of strings which contains the parameter key (or keys for nested object
+        /// parameters). An error is raised at runtime if the parameter is not a boolean.
+        virtual bool get_boolean(const std::vector<std::string>& keys) const {
+            return get_boolean(keys.begin(), keys.end());
+        }
+
+        /// get_number is used to retrieve a numeric parameter.
+        /// It must be given a vector of strings which contains the parameter key (or keys for nested object
+        /// parameters). An error is raised at runtime if the parameter is not a number.
+        virtual double get_number(const std::vector<std::string>& keys) const {
+            return get_number(keys.begin(), keys.end());
+        }
+
+        /// get_string is used to retrieve a string parameter.
+        /// It must be given a vector of strings which contains the parameter key (or keys for nested object
+        /// parameters). An error is raised at runtime if the parameter is not a string.
+        virtual std::string get_string(const std::vector<std::string>& keys) const {
+            return get_string(keys.begin(), keys.end());
+        }
+
+        /// load sets the parameter value from a string which contains JSON data.
+        /// The given data is validated in the process.
+        virtual void load(const std::string& json_data) {
+            if (json_data != std::string()) {
+                uint32_t line = 1;
+                load(json_data.begin(), json_data.end(), line);
+            }
+        }
+
+        /// get_list_parameter is called by a parent parameter when accessing a list value.
+        virtual const list_parameter& get_list_parameter(
+            const std::vector<std::string>::const_iterator,
+            const std::vector<std::string>::const_iterator) const {
+            throw parameter_error("The parameter is not a list");
+        }
+
+        /// get_boolean is called by a parent parameter when accessing a boolean value.
+        virtual bool get_boolean(
+            const std::vector<std::string>::const_iterator,
+            const std::vector<std::string>::const_iterator) const {
+            throw parameter_error("The parameter is not a boolean");
+        }
+
+        /// get_number is called by a parent parameter when accessing a numeric value.
+        virtual double get_number(
+            const std::vector<std::string>::const_iterator,
+            const std::vector<std::string>::const_iterator) const {
+            throw parameter_error("The parameter is not a number");
+        }
+
+        /// get_string is called by a parent parameter when accessing a string value.
+        virtual std::string get_string(
+            const std::vector<std::string>::const_iterator,
+            const std::vector<std::string>::const_iterator) const {
+            throw parameter_error("The parameter is not a string");
+        }
+
+        /// clone generates a copy of the parameter.
+        virtual std::unique_ptr<base_parameter> clone() const = 0;
+
+        /// load is called by a parent parameter when loading JSON data.
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) = 0;
+
+        /// load sets the parameter value from an other parameter.
+        /// The other parameter must a subset of this parameter, and is validated in the process.
+        virtual void load(const base_parameter& parameter) = 0;
+
+        protected:
+        /// trim removes white space and line break characters.
+        static const std::string::const_iterator
+        trim(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line_count) {
+            auto trim_iterator = begin;
+            for (; trim_iterator != file_end && has_character(whitespace_characters, *trim_iterator); ++trim_iterator) {
+                if (*trim_iterator == '\n') {
+                    ++line_count;
+                }
+            }
+            return trim_iterator;
+        }
+
+        /// has_character determines wheter a character is in a string of characters.
+        static constexpr bool has_character(const char* characters, const char character) {
+            return *characters != '\0' && (*characters == character || has_character(characters + 1, character));
+        }
+
+        static constexpr const char* whitespace_characters = " \n\t\v\f\r\0";
+        static constexpr const char* separation_characters = ",}]\0";
+    };
+
+    /// object_parameter is a specialised parameter which contains other parameters.
+    class object_parameter : public base_parameter {
+        public:
+        object_parameter() : base_parameter() {}
+        template <typename string_t, typename parameter_unique_ptr_t, typename... Rest>
+        object_parameter(string_t&& key, parameter_unique_ptr_t&& parameter, Rest&&... rest) :
+            object_parameter(std::forward<Rest>(rest)...) {
+            _parameter_by_key.insert(std::make_pair(
+                std::forward<string_t>(key), std::move(std::forward<parameter_unique_ptr_t>(parameter))));
+        }
+        object_parameter(std::unordered_map<std::string, std::unique_ptr<base_parameter>> parameter_by_key) :
+            object_parameter() {
+            _parameter_by_key = std::move(parameter_by_key);
+        }
+        object_parameter(const object_parameter&) = delete;
+        object_parameter(object_parameter&&) = default;
+        object_parameter& operator=(const object_parameter&) = delete;
+        object_parameter& operator=(object_parameter&&) = default;
+        virtual ~object_parameter() {}
+        const list_parameter& get_list_parameter(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key == end) {
+                throw parameter_error("not enough keys");
+            }
+            return _parameter_by_key.at(*key)->get_list_parameter(key + 1, end);
+        }
+        bool get_boolean(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key == end) {
+                throw parameter_error("not enough keys");
+            }
+            return _parameter_by_key.at(*key)->get_boolean(key + 1, end);
+        }
+        double get_number(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key == end) {
+                throw parameter_error("not enough keys");
+            }
+            return _parameter_by_key.at(*key)->get_number(key + 1, end);
+        }
+        virtual std::string get_string(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key == end) {
+                throw parameter_error("not enough keys");
+            }
+            return _parameter_by_key.at(*key)->get_string(key + 1, end);
+        }
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            std::unordered_map<std::string, std::unique_ptr<base_parameter>> new_parameter_by_key;
+            for (const auto& key_and_parameter : _parameter_by_key) {
+                new_parameter_by_key.insert(std::make_pair(key_and_parameter.first, key_and_parameter.second->clone()));
+            }
+            return sepia::make_unique<object_parameter>(std::move(new_parameter_by_key));
+        }
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+            begin = trim(begin, file_end, line);
+            if (*begin != '{') {
+                throw parse_error("the object does not begin with a brace", line);
+            }
+            ++begin;
+            auto status = ObjectExpecting::whitespace;
+            auto end = begin;
+            auto key = std::string();
+            for (; *end != '}';) {
+                if (end == file_end) {
+                    throw parse_error("unexpected end of file (a closing brace might be missing)", line);
+                }
+                switch (status) {
+                    case ObjectExpecting::whitespace:
+                        end = trim(end, file_end, line);
+                        status = ObjectExpecting::key;
+                        break;
+                    case ObjectExpecting::key:
+                        if (*end != '"') {
+                            throw parse_error("the key does not start with quotes", line);
+                        }
+                        ++end;
+                        status = ObjectExpecting::first_key_letter;
+                        break;
+                    case ObjectExpecting::first_key_letter:
+                        if (*end == '"') {
+                            throw parse_error("the key is an empty string", line);
+                        }
+                        begin = end;
+                        ++end;
+                        status = ObjectExpecting::key_letter;
+                        break;
+                    case ObjectExpecting::key_letter:
+                        if (*end == '"') {
+                            key = std::string(begin, end);
+                            ++end;
+                            end = trim(end, file_end, line);
+                            status = ObjectExpecting::key_separator;
+                        } else {
+                            ++end;
+                        }
+                        break;
+                    case ObjectExpecting::key_separator:
+                        if (*end != ':') {
+                            throw parse_error("key separator ':' not found", line);
+                        }
+                        ++end;
+                        status = ObjectExpecting::field;
+                        break;
+                    case ObjectExpecting::field:
+                        if (_parameter_by_key.find(key) == _parameter_by_key.end()) {
+                            throw parse_error("unexpected key " + key, line);
+                        }
+                        end = _parameter_by_key[key]->load(end, file_end, line);
+                        status = ObjectExpecting::field_separator;
+                        break;
+                    case ObjectExpecting::field_separator:
+                        if (*end != ',') {
+                            throw parse_error("field separator ',' not found", line);
+                        }
+                        ++end;
+                        status = ObjectExpecting::whitespace;
+                        break;
+                }
+            }
+            ++end;
+            return trim(end, file_end, line);
+        }
+        virtual void load(const base_parameter& parameter) override {
+            try {
+                const auto& casted_object_parameter = dynamic_cast<const object_parameter&>(parameter);
+                for (const auto& key_and_parameter : casted_object_parameter) {
+                    if (_parameter_by_key.find(key_and_parameter.first) == _parameter_by_key.end()) {
+                        throw std::runtime_error("Unexpected key " + key_and_parameter.first);
+                    }
+                    _parameter_by_key[key_and_parameter.first]->load(*key_and_parameter.second);
+                }
+            } catch (const std::bad_cast& exception) {
+                throw std::logic_error("Expected an object_parameter, got a " + std::string(typeid(parameter).name()));
+            }
+        }
+
+        /// begin returns an iterator to the beginning of the contained parameters map.
+        virtual std::unordered_map<std::string, std::unique_ptr<base_parameter>>::const_iterator begin() const {
+            return _parameter_by_key.begin();
+        }
+
+        /// end returns an iterator to the end of the contained parameters map.
+        virtual std::unordered_map<std::string, std::unique_ptr<base_parameter>>::const_iterator end() const {
+            return _parameter_by_key.end();
+        }
+
+        protected:
+        /// ObjectExpecting describes the next character expected by the parser.
+        enum class ObjectExpecting {
+            whitespace,
+            key,
+            first_key_letter,
+            key_letter,
+            key_separator,
+            field,
+            field_separator,
+        };
+
+        std::unordered_map<std::string, std::unique_ptr<base_parameter>> _parameter_by_key;
+    };
+
+    /// list_parameter is a specialised parameter which contains other parameters.
+    class list_parameter : public base_parameter {
+        public:
+        /// make_empty generates an empty list parameter with the given value as template.
+        static std::unique_ptr<list_parameter> make_empty(std::unique_ptr<base_parameter> template_parameter) {
+            return sepia::make_unique<list_parameter>(
+                std::vector<std::unique_ptr<base_parameter>>(), std::move(template_parameter));
+        }
+
+        template <typename parameter_unique_ptr_t>
+        list_parameter(parameter_unique_ptr_t&& parameter) : base_parameter(), _template_parameter(parameter->clone()) {
+            _parameters.push_back(std::move(parameter));
+        }
+        template <typename parameter_unique_ptr_t, typename... Rest>
+        list_parameter(parameter_unique_ptr_t&& parameter, Rest&&... rest) :
+            list_parameter(std::forward<Rest>(rest)...) {
+            _parameters.insert(_parameters.begin(), std::move(std::forward<parameter_unique_ptr_t>(parameter)));
+        }
+        list_parameter(
+            std::vector<std::unique_ptr<base_parameter>> parameters,
+            std::unique_ptr<base_parameter> template_parameter) :
+            base_parameter(),
+            _parameters(std::move(parameters)),
+            _template_parameter(std::move(template_parameter)) {}
+        list_parameter(const list_parameter&) = delete;
+        list_parameter(list_parameter&&) = default;
+        list_parameter& operator=(const list_parameter&) = delete;
+        list_parameter& operator=(list_parameter&&) = default;
+        virtual ~list_parameter() {}
+        virtual const list_parameter& get_list_parameter(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key != end) {
+                throw parameter_error("too many keys");
+            }
+            return *this;
+        }
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            std::vector<std::unique_ptr<base_parameter>> new_parameters;
+            for (const auto& parameter : _parameters) {
+                new_parameters.push_back(parameter->clone());
+            }
+            return sepia::make_unique<list_parameter>(std::move(new_parameters), _template_parameter->clone());
+        }
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+            _parameters.clear();
+            begin = trim(begin, file_end, line);
+            if (*begin != '[') {
+                throw parse_error("the list does not begin with a bracket", line);
+            }
+            ++begin;
+            auto status = ListExpecting::whitespace;
+            auto end = begin;
+            auto key = std::string();
+            for (; *end != ']';) {
+                if (end == file_end) {
+                    throw parse_error("unexpected end of file (a closing brace might be missing)", line);
+                }
+                switch (status) {
+                    case ListExpecting::whitespace:
+                        end = trim(end, file_end, line);
+                        status = ListExpecting::field;
+                        break;
+                    case ListExpecting::field:
+                        _parameters.push_back(_template_parameter->clone());
+                        end = _parameters.back()->load(end, file_end, line);
+                        status = ListExpecting::field_separator;
+                        break;
+                    case ListExpecting::field_separator:
+                        if (*end != ',') {
+                            throw parse_error("field separator ',' not found", line);
+                        }
+                        ++end;
+                        status = ListExpecting::whitespace;
+                        break;
+                }
+            }
+            ++end;
+            return trim(end, file_end, line);
+        }
+        virtual void load(const base_parameter& parameter) override {
+            try {
+                const list_parameter& casted_list_parameter = dynamic_cast<const list_parameter&>(parameter);
+                _parameters.clear();
+                for (const auto& stored_parameter : casted_list_parameter) {
+                    auto new_parameter = _template_parameter->clone();
+                    new_parameter->load(*stored_parameter);
+                    _parameters.push_back(std::move(new_parameter));
+                }
+            } catch (const std::bad_cast& exception) {
+                throw std::logic_error("Expected an object_parameter, got a " + std::string(typeid(parameter).name()));
+            }
+        }
+
+        /// size returns the list number of elements
+        virtual std::size_t size() const {
+            return _parameters.size();
+        }
+
+        /// begin returns an iterator to the beginning of the contained parameters vector.
+        virtual std::vector<std::unique_ptr<base_parameter>>::const_iterator begin() const {
+            return _parameters.begin();
+        }
+
+        /// end returns an iterator to the end of the contained parameters vector.
+        virtual std::vector<std::unique_ptr<base_parameter>>::const_iterator end() const {
+            return _parameters.end();
+        }
+
+        protected:
+        /// ListExpecting describes the next character expected by the parser.
+        enum class ListExpecting {
+            whitespace,
+            field,
+            field_separator,
+        };
+
+        std::vector<std::unique_ptr<base_parameter>> _parameters;
+        std::unique_ptr<base_parameter> _template_parameter;
+    };
+
+    /// boolean_parameter is a specialised parameter for boolean values.
+    class boolean_parameter : public base_parameter {
+        public:
+        boolean_parameter(bool value) : base_parameter(), _value(value) {}
+        boolean_parameter(const boolean_parameter&) = delete;
+        boolean_parameter(boolean_parameter&&) = default;
+        boolean_parameter& operator=(const boolean_parameter&) = delete;
+        boolean_parameter& operator=(boolean_parameter&&) = default;
+        virtual ~boolean_parameter() {}
+        virtual bool get_boolean(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key != end) {
+                throw parameter_error("too many keys");
+            }
+            return _value;
+        }
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            return sepia::make_unique<boolean_parameter>(_value);
+        }
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+            begin = trim(begin, file_end, line);
+            auto end = begin;
+            for (; !has_character(separation_characters, *end) && !has_character(whitespace_characters, *end); ++end) {
+                if (end == file_end) {
+                    throw parse_error("unexpected end of file", line);
+                }
+            }
+            const auto trimmed_json_data = std::string(begin, end);
+            if (trimmed_json_data == "true") {
+                _value = true;
+            } else if (trimmed_json_data == "false") {
+                _value = false;
+            } else {
+                throw parse_error("expected a boolean", line);
+            }
+            return trim(end, file_end, line);
+        }
+        virtual void load(const base_parameter& parameter) override {
+            try {
+                _value = parameter.get_boolean({});
+            } catch (const parameter_error& exception) {
+                throw std::logic_error("Expected a boolean_parameter, got a " + std::string(typeid(parameter).name()));
+            }
+        }
+
+        protected:
+        bool _value;
+    };
+
+    /// number_parameter is a specialised parameter for numeric values.
+    class number_parameter : public base_parameter {
+        public:
+        number_parameter(double value, double minimum, double maximum, bool is_integer) :
+            base_parameter(),
+            _value(value),
+            _minimum(minimum),
+            _maximum(maximum),
+            _is_integer(is_integer) {
+            validate();
+        }
+        number_parameter(const number_parameter&) = delete;
+        number_parameter(number_parameter&&) = default;
+        number_parameter& operator=(const number_parameter&) = delete;
+        number_parameter& operator=(number_parameter&&) = default;
+        virtual ~number_parameter() {}
+        virtual double get_number(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key != end) {
+                throw parameter_error("too many keys");
+            }
+            return _value;
+        }
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            return sepia::make_unique<number_parameter>(_value, _minimum, _maximum, _is_integer);
+        }
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+            begin = trim(begin, file_end, line);
+            auto end = begin;
+            for (; !has_character(separation_characters, *end) && !has_character(whitespace_characters, *end); ++end) {
+                if (end == file_end) {
+                    throw parse_error("unexpected end of file", line);
+                }
+            }
+            try {
+                _value = std::stod(std::string(begin, end));
+            } catch (const std::invalid_argument&) {
+                throw parse_error("expected a number", line);
+            }
+            try {
+                validate();
+            } catch (const parameter_error& exception) {
+                throw parse_error(exception.what(), line);
+            }
+            return trim(end, file_end, line);
+        }
+        virtual void load(const base_parameter& parameter) override {
+            try {
+                _value = parameter.get_number({});
+            } catch (const parameter_error& exception) {
+                throw std::logic_error("Expected a number_parameter, got a " + std::string(typeid(parameter).name()));
+            }
+            validate();
+        }
+
+        protected:
+        /// validate determines if the number is valid regarding the given constraints.
+        void validate() {
+            if (std::isnan(_value)) {
+                throw parameter_error("expected a number");
+            }
+            if (_value >= _maximum) {
+                throw parameter_error(std::string("larger than maximum ") + std::to_string(_maximum));
+            }
+            if (_value < _minimum) {
+                throw parameter_error(std::string("smaller than minimum ") + std::to_string(_minimum));
+            }
+            auto integer_part = 0.0;
+            if (_is_integer && std::modf(_value, &integer_part) != 0.0) {
+                throw parameter_error("expected an integer");
+            }
+        }
+
+        double _value;
+        double _minimum;
+        double _maximum;
+        bool _is_integer;
+    };
+
+    /// char_parameter is a specialised number parameter for char numeric values.
+    class char_parameter : public number_parameter {
+        public:
+        char_parameter(double value) : number_parameter(value, 0, 256, true) {}
+        char_parameter(const char_parameter&) = delete;
+        char_parameter(char_parameter&&) = default;
+        char_parameter& operator=(const char_parameter&) = delete;
+        char_parameter& operator=(char_parameter&&) = default;
+        virtual ~char_parameter() {}
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            return sepia::make_unique<char_parameter>(_value);
+        }
+    };
+
+    /// string_parameter is a specialised parameter for string values.
+    class string_parameter : public base_parameter {
+        public:
+        string_parameter(const std::string& value) : base_parameter(), _value(value) {}
+        string_parameter(const string_parameter&) = delete;
+        string_parameter(string_parameter&&) = default;
+        string_parameter& operator=(const string_parameter&) = delete;
+        string_parameter& operator=(string_parameter&&) = default;
+        virtual ~string_parameter() {}
+        virtual std::string get_string(
+            const std::vector<std::string>::const_iterator key,
+            const std::vector<std::string>::const_iterator end) const override {
+            if (key != end) {
+                throw parameter_error("too many keys");
+            }
+            return _value;
+        }
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            return sepia::make_unique<string_parameter>(_value);
+        }
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+            begin = trim(begin, file_end, line);
+            if (*begin != '"') {
+                throw parse_error("the string does not start with quotes", line);
+            }
+            ++begin;
+            auto end = begin;
+            for (; *end != '"'; ++end) {
+                if (end == file_end) {
+                    throw parse_error("unexpected end of file", line);
+                }
+
+                if (*end == '\n') {
+                    throw parse_error("strings cannot contain linebreaks", line);
+                }
+            }
+            _value = std::string(begin, end);
+            ++end;
+            return trim(end, file_end, line);
+        }
+        virtual void load(const base_parameter& parameter) override {
+            try {
+                _value = parameter.get_string({});
+            } catch (const parameter_error& exception) {
+                throw std::logic_error("Expected a string_parameter, got a " + std::string(typeid(parameter).name()));
+            }
+        }
+
+        protected:
+        std::string _value;
+    };
+
+    /// enum_parameter is a specialised parameter for string values with a given set of possible values.
+    class enum_parameter : public string_parameter {
+        public:
+        enum_parameter(const std::string& value, const std::unordered_set<std::string>& available_values) :
+            string_parameter(value),
+            _available_values(available_values) {
+            if (_available_values.size() == 0) {
+                throw parameter_error("an enum parameter needs at least one available value");
+            }
+            validate();
+        }
+        enum_parameter(const enum_parameter&) = delete;
+        enum_parameter(enum_parameter&&) = default;
+        enum_parameter& operator=(const enum_parameter&) = delete;
+        enum_parameter& operator=(enum_parameter&&) = default;
+        virtual ~enum_parameter() {}
+        virtual std::unique_ptr<base_parameter> clone() const override {
+            return sepia::make_unique<enum_parameter>(_value, _available_values);
+        }
+        virtual std::string::const_iterator
+        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+            begin = trim(begin, file_end, line);
+            if (*begin != '"') {
+                throw parse_error("the string does not start with quotes", line);
+            }
+            ++begin;
+            auto end = begin;
+            for (; *end != '"'; ++end) {
+                if (end == file_end) {
+                    throw parse_error("unexpected end of file", line);
+                }
+
+                if (*end == '\n') {
+                    throw parse_error("strings cannot contain linebreaks", line);
+                }
+            }
+            _value = std::string(begin, end);
+            try {
+                validate();
+            } catch (const parameter_error& exception) {
+                throw parse_error(exception.what(), line);
+            }
+            ++end;
+            return trim(end, file_end, line);
+        }
+        virtual void load(const base_parameter& parameter) override {
+            try {
+                _value = parameter.get_string({});
+            } catch (const parameter_error& exception) {
+                throw std::logic_error("Expected an enum_parameter, got a " + std::string(typeid(parameter).name()));
+            }
+            validate();
+        }
+
+        protected:
+        /// validate determines if the enum is valid regarding the given constraints.
+        void validate() {
+            if (_available_values.find(_value) == _available_values.end()) {
+                auto available_values_string = std::string("{");
+                for (const auto& available_value : _available_values) {
+                    if (available_values_string != "{") {
+                        available_values_string += ", ";
+                    }
+                    available_values_string += available_value;
+                }
+                available_values_string += "}";
+                throw parameter_error("The value " + _value + " should be one of " + available_values_string);
+            }
+        }
+
+        std::unordered_set<std::string> _available_values;
+    };
+
+    /// unvalidated_parameter represents either a parameter subset or a JSON filename to be validated against a complete
+    /// parameter. It mimics a union behavior with poor memory management. However, the lifecycles of its attributes are
+    /// properly managed. The class handles file reading when constructed with a JSON filename.
+    class unvalidated_parameter {
+        public:
+        unvalidated_parameter(const std::string& json_filename) : _is_string(true) {
+            if (json_filename != "") {
+                std::ifstream file(json_filename);
+                if (!file.good()) {
+                    throw unreadable_file(json_filename);
+                }
+                file.seekg(0, std::fstream::end);
+                _json_data.reserve(std::size_t(file.tellg()));
+                file.seekg(0, std::fstream::beg);
+                _json_data.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            }
+        }
+        unvalidated_parameter(std::unique_ptr<base_parameter> parameter) :
+            _is_string(false),
+            _parameter(std::move(parameter)) {}
+        unvalidated_parameter(const unvalidated_parameter&) = delete;
+        unvalidated_parameter(unvalidated_parameter&&) = default;
+        unvalidated_parameter& operator=(const unvalidated_parameter&) = delete;
+        unvalidated_parameter& operator=(unvalidated_parameter&&) = default;
+        virtual ~unvalidated_parameter() {}
+
+        /// is_string returns true if the object was constructed as a string.
+        virtual bool is_string() const {
+            return _is_string;
+        }
+
+        /// json_data returns the json data inside the given filename.
+        /// An error is thrown if the object was constructed with a parameter.
+        virtual const std::string& json_data() const {
+            if (!_is_string) {
+                throw parameter_error("The unvalidated parameter is not a string");
+            }
+            return _json_data;
+        }
+
+        /// parameter returns the provided parameter.
+        /// An error is thrown if the object was consrtructed with a string.
+        virtual const base_parameter& parameter() const {
+            if (_is_string) {
+                throw parameter_error("The unvalidated parameter is not a parameter");
+            }
+            return *_parameter;
+        }
+
+        protected:
+        bool _is_string;
+        std::string _json_data;
+        std::unique_ptr<base_parameter> _parameter;
+    };
+
+    /// specialised_camera represents a template-specialised generic event-based camera.
+    template <typename event_t, typename handle_event_t, typename handle_exception_t>
+    class specialised_camera {
+        public:
+        specialised_camera(
+            handle_event_t handle_event,
+            handle_exception_t handle_exception,
+            const std::size_t& fifo_size,
+            const std::chrono::milliseconds& sleep_duration) :
+            _handle_event(std::forward<handle_event_t>(handle_event)),
+            _handle_exception(std::forward<handle_exception_t>(handle_exception)),
+            _buffer_running(true),
+            _sleep_duration(sleep_duration),
+            _head(0),
+            _tail(0) {
+            _events.resize(fifo_size);
+            _buffer_loop = std::thread([this]() -> void {
+                try {
+                    event_t event;
+                    while (_buffer_running.load(std::memory_order_relaxed)) {
+                        const auto current_head = _head.load(std::memory_order_relaxed);
+                        if (current_head == _tail.load(std::memory_order_acquire)) {
+                            std::this_thread::sleep_for(_sleep_duration);
+                        } else {
+                            event = _events[current_head];
+                            _head.store((current_head + 1) % _events.size(), std::memory_order_release);
+                            this->_handle_event(event);
                         }
                     }
                 } catch (...) {
-                    handleException(std::current_exception());
+                    this->_handle_exception(std::current_exception());
                 }
-            }
-    };
+            });
+        }
+        specialised_camera(const specialised_camera&) = delete;
+        specialised_camera(specialised_camera&&) = default;
+        specialised_camera& operator=(const specialised_camera&) = delete;
+        specialised_camera& operator=(specialised_camera&&) = default;
+        virtual ~specialised_camera() {
+            _buffer_running.store(false, std::memory_order_relaxed);
+            _buffer_loop.join();
+        }
 
-    /// DvsEventStreamWriter writes events to an Event Stream file.
-    class DvsEventStreamWriter {
-        public:
-            DvsEventStreamWriter():
-                _logging(false),
-                _previousTimestamp(0)
-            {
-                _accessingEventStream.clear(std::memory_order_release);
+        /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
+        /// If the event could not be inserted (FIFO full), false is returned.
+        virtual bool push(event_t event) {
+            const auto current_tail = _tail.load(std::memory_order_relaxed);
+            const auto next_tail = (current_tail + 1) % _events.size();
+            if (next_tail != _head.load(std::memory_order_acquire)) {
+                _events[current_tail] = event;
+                _tail.store(next_tail, std::memory_order_release);
+                return true;
             }
-            DvsEventStreamWriter(const DvsEventStreamWriter&) = delete;
-            DvsEventStreamWriter(DvsEventStreamWriter&&) = default;
-            DvsEventStreamWriter& operator=(const DvsEventStreamWriter&) = delete;
-            DvsEventStreamWriter& operator=(DvsEventStreamWriter&&) = default;
-            virtual ~DvsEventStreamWriter() {}
-
-            /// operator() handles an event.
-            virtual void operator()(DvsEvent dvsEvent) {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    auto relativeTimestamp = dvsEvent.timestamp - _previousTimestamp;
-                    if (relativeTimestamp >= 15) {
-                        const auto numberOfOverflows = relativeTimestamp / 15;
-                        for (std::size_t index = 0; index < numberOfOverflows / 15; ++index) {
-                            _eventStream.put(static_cast<uint8_t>(0b11111111));
-                        }
-                        const auto numberOfOverflowsLeft = numberOfOverflows % 15;
-                        if (numberOfOverflowsLeft > 0) {
-                            _eventStream.put(static_cast<uint8_t>(0b1111) | static_cast<uint8_t>(numberOfOverflowsLeft << 4));
-                        }
-                        relativeTimestamp -= numberOfOverflows * 15;
-                    }
-                    _eventStream.put(static_cast<uint8_t>(relativeTimestamp) | static_cast<uint8_t>((dvsEvent.x & 0b1111) << 4));
-                    _eventStream.put(static_cast<uint8_t>((dvsEvent.x & 0b1111110000) >> 4) | static_cast<uint8_t>((dvsEvent.y & 0b11) << 6));
-                    _eventStream.put(static_cast<uint8_t>((dvsEvent.y & 0b111111100) >> 2) | static_cast<uint8_t>(dvsEvent.isIncrease ? 0b10000000 : 0));
-                    _previousTimestamp = dvsEvent.timestamp;
-                }
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// open is a thread-safe method to start logging events to the given file.
-            virtual void open(const std::string& filename) {
-                _eventStream.open(filename, std::ifstream::binary);
-                if (!_eventStream.good()) {
-                    throw UnwritableFile(filename);
-                }
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Already logging");
-                }
-                _eventStream.write("Event Stream", 12);
-                _eventStream.put(1);
-                _eventStream.put(0);
-                _eventStream.put(0);
-                _logging = true;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// close is a thread-safe method to stop logging the events and close the file.
-            virtual void close() {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (!_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Was not logging");
-                }
-                _logging = false;
-                _eventStream.close();
-                _previousTimestamp = 0;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
+            return false;
+        }
 
         protected:
-            std::ofstream _eventStream;
-            bool _logging;
-            std::atomic_flag _accessingEventStream;
-            uint64_t _previousTimestamp;
-    };
-
-    /// HandleDvsByte implements the event stream state machine for DVS events.
-    class HandleDvsByte {
-        public:
-            HandleDvsByte() :
-                _state(State::idle),
-                _dvsEvent(DvsEvent{0, 0, 0, false})
-            {
-            }
-            HandleDvsByte(const HandleDvsByte&) = default;
-            HandleDvsByte(HandleDvsByte&&) = default;
-            HandleDvsByte& operator=(const HandleDvsByte&) = default;
-            HandleDvsByte& operator=(HandleDvsByte&&) = default;
-            virtual ~HandleDvsByte() {}
-
-            /// operator() handles a byte.
-            virtual bool operator()(uint8_t byte, DvsEvent& dvsEvent) {
-                switch (_state) {
-                    case State::idle: {
-                        if ((byte & 0b1111) == 0b1111) {
-                            _dvsEvent.timestamp += ((byte & 0b11110000) >> 4) * 15;
-                        } else {
-                            _dvsEvent.timestamp = _dvsEvent.timestamp + (byte & 0b1111);
-                            _dvsEvent.x = ((byte & 0b11110000) >> 4);
-                            _state = State::byte0;
-                        }
-                        return false;
-                    }
-                    case State::byte0: {
-                        _dvsEvent.x |= (static_cast<uint16_t>(byte & 0b111111) << 4);
-                        _dvsEvent.y = ((byte & 0b11000000) >> 6);
-                        _state = State::byte1;
-                        return false;
-                    }
-                    case State::byte1: {
-                        _dvsEvent.y |= (static_cast<uint16_t>(byte & 0b1111111) << 2);
-                        _dvsEvent.isIncrease = (((byte & 0b10000000) >> 7) == 1);
-                        _state = State::idle;
-                        dvsEvent = _dvsEvent;
-                        return true;
-                    }
-                }
-            }
-
-            /// reset initialises the state machine.
-            virtual void reset() {
-                _state = State::idle;
-                _dvsEvent.timestamp = 0;
-            }
-
-        protected:
-
-            /// State represents the current state machine's state.
-            enum class State {
-                idle,
-                byte0,
-                byte1,
-            };
-
-            State _state;
-            DvsEvent _dvsEvent;
-    };
-
-    /// DvsEventStreamObservable is a template-specialised EventStreamObservable for DVS events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class DvsEventStreamObservable : public EventStreamObservable {
-        public:
-            DvsEventStreamObservable(
-                const std::string& filename,
-                HandleEvent handleEvent,
-                HandleException handleException,
-                MustRestart mustRestart,
-                EventStreamObservable::Dispatch dispatch,
-                const std::size_t& chunkSize
-            ) :
-                _eventStream(filename, std::ifstream::binary),
-                _running(true)
-            {
-                if (!_eventStream.good()) {
-                    throw UnreadableFile(filename);
-                }
-                {
-                    const auto readSignature = std::string("Event Stream");
-                    _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    const auto versionMajor = _eventStream.get();
-                    const auto versionMinor = _eventStream.get();
-                    if (_eventStream.eof() || readSignature != "Event Stream") {
-                        throw WrongSignature(filename);
-                    }
-                    if (versionMajor != 1 || versionMinor != 0) {
-                        throw UnsupportedVersion(filename);
-                    }
-                    const auto mode = _eventStream.get();
-                    if (_eventStream.eof() || mode != 0) {
-                        throw UnsupportedMode(filename);
-                    }
-                }
-                _loop = std::thread(
-                    readAndDispatch<DvsEvent, HandleDvsByte, MustRestart, HandleEvent, HandleException>,
-                    std::ref(_eventStream),
-                    std::ref(_running),
-                    dispatch,
-                    chunkSize,
-                    HandleDvsByte(),
-                    std::forward<MustRestart>(mustRestart),
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException)
-                );
-            }
-            DvsEventStreamObservable(const DvsEventStreamObservable&) = delete;
-            DvsEventStreamObservable(DvsEventStreamObservable&&) = default;
-            DvsEventStreamObservable& operator=(const DvsEventStreamObservable&) = delete;
-            DvsEventStreamObservable& operator=(DvsEventStreamObservable&&) = default;
-            virtual ~DvsEventStreamObservable() {
-                _running.store(false, std::memory_order_relaxed);
-                _loop.join();
-            }
-
-        protected:
-            std::ifstream _eventStream;
-            std::atomic_bool _running;
-            std::thread _loop;
-    };
-
-    /// make_dvsEventStreamObservable creates an event stream observable from functors.
-    template<typename HandleEvent, typename HandleException, typename MustRestart = decltype(&falseFunction)>
-    std::unique_ptr<DvsEventStreamObservable<HandleEvent, HandleException, MustRestart>> make_dvsEventStreamObservable(
-        const std::string& filename,
-        HandleEvent handleEvent,
-        HandleException handleException,
-        MustRestart mustRestart = &falseFunction,
-        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
-        std::size_t chunkSize = 1 << 10
-    ) {
-        return sepia::make_unique<DvsEventStreamObservable<HandleEvent, HandleException, MustRestart>>(
-            filename,
-            std::forward<HandleEvent>(handleEvent),
-            std::forward<HandleException>(handleException),
-            std::forward<MustRestart>(mustRestart),
-            dispatch,
-            chunkSize
-        );
-    }
-
-    /// AtisEventStreamWriter writes events to an Event Stream file.
-    class AtisEventStreamWriter {
-        public:
-            AtisEventStreamWriter():
-                _logging(false),
-                _previousTimestamp(0)
-            {
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-            AtisEventStreamWriter(const AtisEventStreamWriter&) = delete;
-            AtisEventStreamWriter(AtisEventStreamWriter&&) = default;
-            AtisEventStreamWriter& operator=(const AtisEventStreamWriter&) = delete;
-            AtisEventStreamWriter& operator=(AtisEventStreamWriter&&) = default;
-            virtual ~AtisEventStreamWriter() {}
-
-            /// operator() handles an event.
-            virtual void operator()(AtisEvent atisEvent) {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    auto relativeTimestamp = atisEvent.timestamp - _previousTimestamp;
-                    if (relativeTimestamp >= 31) {
-                        const auto numberOfOverflows = relativeTimestamp / 31;
-                        for (std::size_t index = 0; index < numberOfOverflows / 7; ++index) {
-                            _eventStream.put(static_cast<uint8_t>(0b11111111));
-                        }
-                        const auto numberOfOverflowsLeft = numberOfOverflows % 7;
-                        if (numberOfOverflowsLeft > 0) {
-                            _eventStream.put(static_cast<uint8_t>(0b11111) | static_cast<uint8_t>(numberOfOverflowsLeft << 5));
-                        }
-                        relativeTimestamp -= numberOfOverflows * 31;
-                    }
-                    _eventStream.put(static_cast<uint8_t>(relativeTimestamp) | static_cast<uint8_t>((atisEvent.x & 0b111) << 5));
-                    _eventStream.put(static_cast<uint8_t>((atisEvent.x & 0b111111000) >> 3) | static_cast<uint8_t>((atisEvent.y & 0b11) << 6));
-                    _eventStream.put(
-                        static_cast<uint8_t>((atisEvent.y & 0b11111100) >> 2)
-                        | static_cast<uint8_t>(atisEvent.isThresholdCrossing ? 0b1000000 : 0)
-                        | static_cast<uint8_t>(atisEvent.polarity ? 0b10000000 : 0)
-                    );
-                    _previousTimestamp = atisEvent.timestamp;
-                }
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// open is a thread-safe method to start logging events to the given file.
-            virtual void open(const std::string& filename) {
-                _eventStream.open(filename, std::ifstream::binary);
-                if (!_eventStream.good()) {
-                    throw UnwritableFile(filename);
-                }
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Already logging");
-                }
-                _eventStream.write("Event Stream", 12);
-                _eventStream.put(1);
-                _eventStream.put(0);
-                _eventStream.put(1);
-                _logging = true;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// close is a thread-safe method to stop logging the events and close the file.
-            virtual void close() {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (!_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Was not logging");
-                }
-                _logging = false;
-                _eventStream.close();
-                _previousTimestamp = 0;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-        protected:
-            std::ofstream _eventStream;
-            bool _logging;
-            std::atomic_flag _accessingEventStream;
-            uint64_t _previousTimestamp;
-    };
-
-    /// HandleAtisByte implements the event stream state machine for ATIS events.
-    class HandleAtisByte {
-        public:
-            HandleAtisByte() :
-                _state(State::idle),
-                _atisEvent(AtisEvent{0, 0, 0, false, false})
-            {
-            }
-            HandleAtisByte(const HandleAtisByte&) = default;
-            HandleAtisByte(HandleAtisByte&&) = default;
-            HandleAtisByte& operator=(const HandleAtisByte&) = default;
-            HandleAtisByte& operator=(HandleAtisByte&&) = default;
-            virtual ~HandleAtisByte() {}
-
-            /// operator() handles a byte.
-            virtual bool operator()(uint8_t byte, AtisEvent& atisEvent) {
-                switch (_state) {
-                    case State::idle: {
-                        if ((byte & 0b11111) == 0b11111) {
-                            _atisEvent.timestamp += ((byte & 0b11100000) >> 5) * 31;
-                        } else {
-                            _atisEvent.timestamp = _atisEvent.timestamp + (byte & 0b11111);
-                            _atisEvent.x = ((byte & 0b11100000) >> 5);
-                            _state = State::byte0;
-                        }
-                        return false;
-                    }
-                    case State::byte0: {
-                        _atisEvent.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
-                        _atisEvent.y = ((byte & 0b11000000) >> 6);
-                        _state = State::byte1;
-                        return false;
-                    }
-                    case State::byte1: {
-                        _atisEvent.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
-                        _atisEvent.isThresholdCrossing = (((byte & 0b1000000) >> 6) == 1);
-                        _atisEvent.polarity = (((byte & 0b10000000) >> 7) == 1);
-                        _state = State::idle;
-                        atisEvent = _atisEvent;
-                        return true;
-                    }
-                }
-            }
-
-            /// reset initialises the state machine.
-            virtual void reset() {
-                _state = State::idle;
-                _atisEvent.timestamp = 0;
-            }
-
-        protected:
-
-            /// State represents the current state machine's state.
-            enum class State {
-                idle,
-                byte0,
-                byte1,
-            };
-
-            State _state;
-            AtisEvent _atisEvent;
-    };
-
-    /// AtisEventStreamObservable is a template-specialised EventStreamObservable for ATIS events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class AtisEventStreamObservable : public EventStreamObservable {
-        public:
-            AtisEventStreamObservable(
-                const std::string& filename,
-                HandleEvent handleEvent,
-                HandleException handleException,
-                MustRestart mustRestart,
-                EventStreamObservable::Dispatch dispatch,
-                const std::size_t& chunkSize
-            ) :
-                _eventStream(filename, std::ifstream::binary),
-                _running(true)
-            {
-                if (!_eventStream.good()) {
-                    throw UnreadableFile(filename);
-                }
-                {
-                    const auto readSignature = std::string("Event Stream");
-                    _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    const auto versionMajor = _eventStream.get();
-                    const auto versionMinor = _eventStream.get();
-                    if (_eventStream.eof() || readSignature != "Event Stream") {
-                        throw WrongSignature(filename);
-                    }
-                    if (versionMajor != 1 || versionMinor != 0) {
-                        throw UnsupportedVersion(filename);
-                    }
-                    const auto mode = _eventStream.get();
-                    if (_eventStream.eof() || mode != 1) {
-                        throw UnsupportedMode(filename);
-                    }
-                }
-                _loop = std::thread(
-                    readAndDispatch<AtisEvent, HandleAtisByte, MustRestart, HandleEvent, HandleException>,
-                    std::ref(_eventStream),
-                    std::ref(_running),
-                    dispatch,
-                    chunkSize,
-                    HandleAtisByte(),
-                    std::forward<MustRestart>(mustRestart),
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException)
-                );
-            }
-            AtisEventStreamObservable(const AtisEventStreamObservable&) = delete;
-            AtisEventStreamObservable(AtisEventStreamObservable&&) = default;
-            AtisEventStreamObservable& operator=(const AtisEventStreamObservable&) = delete;
-            AtisEventStreamObservable& operator=(AtisEventStreamObservable&&) = default;
-            virtual ~AtisEventStreamObservable() {
-                _running.store(false, std::memory_order_relaxed);
-                _loop.join();
-            }
-
-        protected:
-            std::ifstream _eventStream;
-            std::atomic_bool _running;
-            std::thread _loop;
-    };
-
-    /// make_atisEventStreamObservable creates an event stream observable from functors.
-    template<typename HandleEvent, typename HandleException, typename MustRestart = decltype(&falseFunction)>
-    std::unique_ptr<AtisEventStreamObservable<HandleEvent, HandleException, MustRestart>> make_atisEventStreamObservable(
-        const std::string& filename,
-        HandleEvent handleEvent,
-        HandleException handleException,
-        MustRestart mustRestart = &falseFunction,
-        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
-        std::size_t chunkSize = 1 << 10
-    ) {
-        return sepia::make_unique<AtisEventStreamObservable<HandleEvent, HandleException, MustRestart>>(
-            filename,
-            std::forward<HandleEvent>(handleEvent),
-            std::forward<HandleException>(handleException),
-            std::forward<MustRestart>(mustRestart),
-            dispatch,
-            chunkSize
-        );
-    }
-
-    /// ColorEventStreamWriter writes events to a color Event Stream file.
-    class ColorEventStreamWriter {
-        public:
-            ColorEventStreamWriter():
-                _logging(false),
-                _previousTimestamp(0)
-            {
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-            ColorEventStreamWriter(const ColorEventStreamWriter&) = delete;
-            ColorEventStreamWriter(ColorEventStreamWriter&&) = default;
-            ColorEventStreamWriter& operator=(const ColorEventStreamWriter&) = delete;
-            ColorEventStreamWriter& operator=(ColorEventStreamWriter&&) = default;
-            virtual ~ColorEventStreamWriter() {}
-
-            /// operator() handles an event.
-            virtual void operator()(ColorEvent colorEvent) {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    auto relativeTimestamp = colorEvent.timestamp - _previousTimestamp;
-                    if (relativeTimestamp >= 127) {
-                        const auto numberOfOverflows = relativeTimestamp / 127;
-                        for (std::size_t index = 0; index < numberOfOverflows; ++index) {
-                            _eventStream.put(static_cast<uint8_t>(0b11111111));
-                        }
-                        relativeTimestamp -= numberOfOverflows * 127;
-                    }
-                    _eventStream.put(static_cast<uint8_t>(relativeTimestamp) | static_cast<uint8_t>((colorEvent.x & 0b1) << 7));
-                    _eventStream.put(static_cast<uint8_t>((colorEvent.x & 0b111111110) >> 1));
-                    _eventStream.put(static_cast<uint8_t>(colorEvent.y));
-                    _eventStream.put(colorEvent.r);
-                    _eventStream.put(colorEvent.g);
-                    _eventStream.put(colorEvent.b);
-                    _previousTimestamp = colorEvent.timestamp;
-                }
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// open is a thread-safe method to start logging events to the given file.
-            virtual void open(const std::string& filename) {
-                _eventStream.open(filename, std::ifstream::binary);
-                if (!_eventStream.good()) {
-                    throw UnwritableFile(filename);
-                }
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Already logging");
-                }
-                _eventStream.write("Event Stream", 12);
-                _eventStream.put(1);
-                _eventStream.put(0);
-                _eventStream.put(3);
-                _logging = true;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// close is a thread-safe method to stop logging the events and close the file.
-            virtual void close() {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (!_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Was not logging");
-                }
-                _logging = false;
-                _eventStream.close();
-                _previousTimestamp = 0;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-        protected:
-            std::ofstream _eventStream;
-            bool _logging;
-            std::atomic_flag _accessingEventStream;
-            uint64_t _previousTimestamp;
-    };
-
-    /// HandleColorByte implements the event stream state machine for color events.
-    class HandleColorByte {
-        public:
-            HandleColorByte() :
-                _state(State::idle),
-                _colorEvent(ColorEvent{0, 0, 0, 0, 0, 0})
-            {
-            }
-            HandleColorByte(const HandleColorByte&) = default;
-            HandleColorByte(HandleColorByte&&) = default;
-            HandleColorByte& operator=(const HandleColorByte&) = default;
-            HandleColorByte& operator=(HandleColorByte&&) = default;
-            virtual ~HandleColorByte() {}
-
-            /// operator() handles a byte.
-            virtual bool operator()(uint8_t byte, ColorEvent& colorEvent) {
-                switch (_state) {
-                    case State::idle: {
-                        if ((byte & 0b1111111) == 0b1111111) {
-                            _colorEvent.timestamp += ((byte & 0b10000000) >> 7) * 127;
-                        } else {
-                            _colorEvent.timestamp = _colorEvent.timestamp + (byte & 0b1111111);
-                            _colorEvent.x = ((byte & 0b10000000) >> 7);
-                            _state = State::byte0;
-                        }
-                        return false;
-                    }
-                    case State::byte0: {
-                        _colorEvent.x |= (static_cast<uint16_t>(byte) << 1);
-                        _state = State::byte1;
-                        return false;
-                    }
-                    case State::byte1: {
-                        _colorEvent.y = byte;
-                        _state = State::byte2;
-                        return false;
-                    }
-                    case State::byte2: {
-                        _colorEvent.r = byte;
-                        _state = State::byte3;
-                        return false;
-                    }
-                    case State::byte3: {
-                        _colorEvent.g = byte;
-                        _state = State::byte4;
-                        return false;
-                    }
-                    case State::byte4: {
-                        _colorEvent.b = byte;
-                        _state = State::idle;
-                        colorEvent = _colorEvent;
-                        return true;
-                    }
-                }
-            }
-
-            /// reset initialises the state machine.
-            virtual void reset() {
-                _state = State::idle;
-                _colorEvent.timestamp = 0;
-            }
-
-        protected:
-
-            /// State represents the current state machine's state.
-            enum class State {
-                idle,
-                byte0,
-                byte1,
-                byte2,
-                byte3,
-                byte4,
-            };
-
-            State _state;
-            ColorEvent _colorEvent;
-    };
-
-    /// ColorEventStreamObservable is a template-specialised EventStreamObservable for color events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class ColorEventStreamObservable : public EventStreamObservable {
-        public:
-            ColorEventStreamObservable(
-                const std::string& filename,
-                HandleEvent handleEvent,
-                HandleException handleException,
-                MustRestart mustRestart,
-                EventStreamObservable::Dispatch dispatch,
-                const std::size_t& chunkSize
-            ) :
-                _eventStream(filename, std::ifstream::binary),
-                _running(true)
-            {
-                if (!_eventStream.good()) {
-                    throw UnreadableFile(filename);
-                }
-                {
-                    const auto readSignature = std::string("Event Stream");
-                    _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    const auto versionMajor = _eventStream.get();
-                    const auto versionMinor = _eventStream.get();
-                    if (_eventStream.eof() || readSignature != "Event Stream") {
-                        throw WrongSignature(filename);
-                    }
-                    if (versionMajor != 1 || versionMinor != 0) {
-                        throw UnsupportedVersion(filename);
-                    }
-                    const auto mode = _eventStream.get();
-                    if (_eventStream.eof() || mode != 3) {
-                        throw UnsupportedMode(filename);
-                    }
-                }
-                _loop = std::thread(
-                    readAndDispatch<ColorEvent, HandleColorByte, MustRestart, HandleEvent, HandleException>,
-                    std::ref(_eventStream),
-                    std::ref(_running),
-                    dispatch,
-                    chunkSize,
-                    HandleColorByte(),
-                    std::forward<MustRestart>(mustRestart),
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException)
-                );
-            }
-            ColorEventStreamObservable(const ColorEventStreamObservable&) = delete;
-            ColorEventStreamObservable(ColorEventStreamObservable&&) = default;
-            ColorEventStreamObservable& operator=(const ColorEventStreamObservable&) = delete;
-            ColorEventStreamObservable& operator=(ColorEventStreamObservable&&) = default;
-            virtual ~ColorEventStreamObservable() {
-                _running.store(false, std::memory_order_relaxed);
-                _loop.join();
-            }
-
-        protected:
-            std::ifstream _eventStream;
-            std::atomic_bool _running;
-            std::thread _loop;
-    };
-
-    /// make_colorEventStreamObservable creates an event stream observable from functors.
-    template<typename HandleEvent, typename HandleException, typename MustRestart = decltype(&falseFunction)>
-    std::unique_ptr<ColorEventStreamObservable<HandleEvent, HandleException, MustRestart>> make_colorEventStreamObservable(
-        const std::string& filename,
-        HandleEvent handleEvent,
-        HandleException handleException,
-        MustRestart mustRestart = &falseFunction,
-        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
-        std::size_t chunkSize = 1 << 10
-    ) {
-        return sepia::make_unique<ColorEventStreamObservable<HandleEvent, HandleException, MustRestart>>(
-            filename,
-            std::forward<HandleEvent>(handleEvent),
-            std::forward<HandleException>(handleException),
-            std::forward<MustRestart>(mustRestart),
-            dispatch,
-            chunkSize
-        );
-    }
-
-    /// GenericEventStreamWriter writes events to a generic Event Stream file.
-    class GenericEventStreamWriter {
-        public:
-            GenericEventStreamWriter():
-                _logging(false),
-                _previousTimestamp(0)
-            {
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-            GenericEventStreamWriter(const GenericEventStreamWriter&) = delete;
-            GenericEventStreamWriter(GenericEventStreamWriter&&) = default;
-            GenericEventStreamWriter& operator=(const GenericEventStreamWriter&) = delete;
-            GenericEventStreamWriter& operator=(GenericEventStreamWriter&&) = default;
-            virtual ~GenericEventStreamWriter() {}
-
-            /// operator() handles an event.
-            virtual void operator()(GenericEvent genericEvent) {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    auto relativeTimestamp = genericEvent.timestamp - _previousTimestamp;
-                    if (relativeTimestamp >= 127) {
-                        const auto numberOfOverflows = relativeTimestamp / 127;
-                        for (std::size_t index = 0; index < numberOfOverflows; ++index) {
-                            _eventStream.put(static_cast<uint8_t>(0b11111111));
-                        }
-                        relativeTimestamp -= numberOfOverflows * 127;
-                    }
-                    _eventStream.put(static_cast<uint8_t>(relativeTimestamp) | static_cast<uint8_t>((genericEvent.extraBit ? 0b1 : 0b0) << 7));
-                    _eventStream.put(static_cast<uint8_t>(genericEvent.data & 0x00000000000000ff));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0x000000000000ff00) >> 8));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0x0000000000ff0000) >> 16));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0x00000000ff000000) >> 24));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0x0000000ff0000000) >> 32));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0x0000ff0000000000) >> 40));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0x00ff000000000000) >> 48));
-                    _eventStream.put(static_cast<uint8_t>((genericEvent.data & 0xff00000000000000) >> 56));
-                    _previousTimestamp = genericEvent.timestamp;
-                }
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// open is a thread-safe method to start logging events to the given file.
-            virtual void open(const std::string& filename) {
-                _eventStream.open(filename, std::ifstream::binary);
-                if (!_eventStream.good()) {
-                    throw UnwritableFile(filename);
-                }
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Already logging");
-                }
-                _eventStream.write("Event Stream", 12);
-                _eventStream.put(1);
-                _eventStream.put(0);
-                _eventStream.put(4);
-                _logging = true;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-            /// close is a thread-safe method to stop logging the events and close the file.
-            virtual void close() {
-                while (_accessingEventStream.test_and_set(std::memory_order_acquire)) {}
-                if (!_logging) {
-                    _accessingEventStream.clear(std::memory_order_release);
-                    throw std::runtime_error("Was not logging");
-                }
-                _logging = false;
-                _eventStream.close();
-                _previousTimestamp = 0;
-                _accessingEventStream.clear(std::memory_order_release);
-            }
-
-        protected:
-            std::ofstream _eventStream;
-            bool _logging;
-            std::atomic_flag _accessingEventStream;
-            uint64_t _previousTimestamp;
-    };
-
-    /// HandleGenericByte implements the event stream state machine for generic events.
-    class HandleGenericByte {
-        public:
-            HandleGenericByte() :
-                _state(State::idle),
-                _genericEvent(GenericEvent{0, 0, false})
-            {
-            }
-            HandleGenericByte(const HandleGenericByte&) = default;
-            HandleGenericByte(HandleGenericByte&&) = default;
-            HandleGenericByte& operator=(const HandleGenericByte&) = default;
-            HandleGenericByte& operator=(HandleGenericByte&&) = default;
-            virtual ~HandleGenericByte() {}
-
-            /// operator() handles a byte.
-            virtual bool operator()(uint8_t byte, GenericEvent& genericEvent) {
-                switch (_state) {
-                    case State::idle: {
-                        if ((byte & 0b1111111) == 0b1111111) {
-                            _genericEvent.timestamp += ((byte & 0b10000000) >> 7) * 127;
-                        } else {
-                            _genericEvent.timestamp = _genericEvent.timestamp + (byte & 0b1111111);
-                            _genericEvent.extraBit = ((byte & 0b10000000) >> 7) == 1;
-                            _state = State::byte0;
-                        }
-                        return false;
-                    }
-                    case State::byte0: {
-                        _genericEvent.data = byte;
-                        _state = State::byte1;
-                        return false;
-                    }
-                    case State::byte1: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 8;
-                        _state = State::byte2;
-                        return false;
-                    }
-                    case State::byte2: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 16;
-                        _state = State::byte3;
-                        return false;
-                    }
-                    case State::byte3: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 24;
-                        _state = State::byte4;
-                        return false;
-                    }
-                    case State::byte4: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 24;
-                        _state = State::byte5;
-                        return false;
-                    }
-                    case State::byte5: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 24;
-                        _state = State::byte6;
-                        return false;
-                    }
-                    case State::byte6: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 24;
-                        _state = State::byte7;
-                        return false;
-                    }
-                    case State::byte7: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 24;
-                        _state = State::byte8;
-                        return false;
-                    }
-                    case State::byte8: {
-                        _genericEvent.data |= static_cast<uint64_t>(byte) << 56;
-                        _state = State::idle;
-                        genericEvent = _genericEvent;
-                        return true;
-                    }
-                }
-            }
-
-            /// reset initialises the state machine.
-            virtual void reset() {
-                _state = State::idle;
-                _genericEvent.timestamp = 0;
-            }
-
-        protected:
-
-            /// State represents the current state machine's state.
-            enum class State {
-                idle,
-                byte0,
-                byte1,
-                byte2,
-                byte3,
-                byte4,
-                byte5,
-                byte6,
-                byte7,
-                byte8,
-            };
-
-            State _state;
-            GenericEvent _genericEvent;
-    };
-
-    /// GenericEventStreamObservable is a template-specialised EventStreamObservable for generic events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class GenericEventStreamObservable : public EventStreamObservable {
-        public:
-            GenericEventStreamObservable(
-                const std::string& filename,
-                HandleEvent handleEvent,
-                HandleException handleException,
-                MustRestart mustRestart,
-                EventStreamObservable::Dispatch dispatch,
-                const std::size_t& chunkSize
-            ) :
-                _eventStream(filename, std::ifstream::binary),
-                _running(true)
-            {
-                if (!_eventStream.good()) {
-                    throw UnreadableFile(filename);
-                }
-                {
-                    const auto readSignature = std::string("Event Stream");
-                    _eventStream.read(const_cast<char*>(readSignature.data()), readSignature.length());
-                    const auto versionMajor = _eventStream.get();
-                    const auto versionMinor = _eventStream.get();
-                    if (_eventStream.eof() || readSignature != "Event Stream") {
-                        throw WrongSignature(filename);
-                    }
-                    if (versionMajor != 1 || versionMinor != 0) {
-                        throw UnsupportedVersion(filename);
-                    }
-                    const auto mode = _eventStream.get();
-                    if (_eventStream.eof() || mode != 4) {
-                        throw UnsupportedMode(filename);
-                    }
-                }
-                _loop = std::thread(
-                    readAndDispatch<GenericEvent, HandleAtisByte, MustRestart, HandleEvent, HandleException>,
-                    std::ref(_eventStream),
-                    std::ref(_running),
-                    dispatch,
-                    chunkSize,
-                    HandleGenericByte(),
-                    std::forward<MustRestart>(mustRestart),
-                    std::forward<HandleEvent>(handleEvent),
-                    std::forward<HandleException>(handleException)
-                );
-            }
-            GenericEventStreamObservable(const GenericEventStreamObservable&) = delete;
-            GenericEventStreamObservable(GenericEventStreamObservable&&) = default;
-            GenericEventStreamObservable& operator=(const GenericEventStreamObservable&) = delete;
-            GenericEventStreamObservable& operator=(GenericEventStreamObservable&&) = default;
-            virtual ~GenericEventStreamObservable() {
-                _running.store(false, std::memory_order_relaxed);
-                _loop.join();
-            }
-
-        protected:
-            std::ifstream _eventStream;
-            std::atomic_bool _running;
-            std::thread _loop;
-    };
-
-    /// make_genericEventStreamObservable creates an event stream observable from functors.
-    template<typename HandleEvent, typename HandleException, typename MustRestart = decltype(&falseFunction)>
-    std::unique_ptr<GenericEventStreamObservable<HandleEvent, HandleException, MustRestart>> make_genericEventStreamObservable(
-        const std::string& filename,
-        HandleEvent handleEvent,
-        HandleException handleException,
-        MustRestart mustRestart = &falseFunction,
-        EventStreamObservable::Dispatch dispatch = EventStreamObservable::Dispatch::synchronouslyButSkipOffset,
-        std::size_t chunkSize = 1 << 10
-    ) {
-        return sepia::make_unique<AtisEventStreamObservable<HandleEvent, HandleException, MustRestart>>(
-            filename,
-            std::forward<HandleEvent>(handleEvent),
-            std::forward<HandleException>(handleException),
-            std::forward<MustRestart>(mustRestart),
-            dispatch,
-            chunkSize
-        );
-    }
-
-    /// Forward-declare parameter for referencing in UnvalidatedParameter.
-    class Parameter;
-
-    /// Forward-declare ObjectParameter and ListParameter for referencing in Parameter.
-    class ObjectParameter;
-    class ListParameter;
-
-    /// Parameter corresponds to a setting or a group of settings.
-    /// This class is used to validate the JSON parameters file, which is used to set the biases and other camera parameters.
-    class Parameter {
-        public:
-            Parameter() = default;
-            Parameter(const Parameter&) = delete;
-            Parameter(Parameter&&) = default;
-            Parameter& operator=(const Parameter&) = delete;
-            Parameter& operator=(Parameter&&) = default;
-            virtual ~Parameter() {};
-
-            /// getListParameter is used to retrieve a list parameter.
-            /// It must be given a vector of strings which contains the parameter key (or keys for nested object parameters).
-            /// An error is raised at runtime if the parameter is not a list.
-            virtual const ListParameter& getListParameter(const std::vector<std::string>& keys) const {
-                return getListParameter(keys.begin(), keys.end());
-            }
-
-            /// getBoolean is used to retrieve a boolean parameter.
-            /// It must be given a vector of strings which contains the parameter key (or keys for nested object parameters).
-            /// An error is raised at runtime if the parameter is not a boolean.
-            virtual bool getBoolean(const std::vector<std::string>& keys) const {
-                return getBoolean(keys.begin(), keys.end());
-            }
-
-            /// getNumber is used to retrieve a numeric parameter.
-            /// It must be given a vector of strings which contains the parameter key (or keys for nested object parameters).
-            /// An error is raised at runtime if the parameter is not a number.
-            virtual double getNumber(const std::vector<std::string>& keys) const {
-                return getNumber(keys.begin(), keys.end());
-            }
-
-            /// getString is used to retrieve a string parameter.
-            /// It must be given a vector of strings which contains the parameter key (or keys for nested object parameters).
-            /// An error is raised at runtime if the parameter is not a string.
-            virtual std::string getString(const std::vector<std::string>& keys) const {
-                return getString(keys.begin(), keys.end());
-            }
-
-            /// load sets the parameter value from a string which contains JSON data.
-            /// The given data is validated in the process.
-            virtual void load(const std::string& jsonData) {
-                if (jsonData != std::string()) {
-                    uint32_t line = 1;
-                    load(jsonData.begin(), jsonData.end(), line);
-                }
-            }
-
-            /// getListParameter is called by a parent parameter when accessing a list value.
-            virtual const ListParameter& getListParameter(
-                const std::vector<std::string>::const_iterator,
-                const std::vector<std::string>::const_iterator
-            ) const {
-                throw ParameterError("The parameter is not a list");
-            }
-
-            /// getBoolean is called by a parent parameter when accessing a boolean value.
-            virtual bool getBoolean(const std::vector<std::string>::const_iterator, const std::vector<std::string>::const_iterator) const {
-                throw ParameterError("The parameter is not a boolean");
-            }
-
-            /// getNumber is called by a parent parameter when accessing a numeric value.
-            virtual double getNumber(const std::vector<std::string>::const_iterator, const std::vector<std::string>::const_iterator) const {
-                throw ParameterError("The parameter is not a number");
-            }
-
-            /// getString is called by a parent parameter when accessing a string value.
-            virtual std::string getString(const std::vector<std::string>::const_iterator, const std::vector<std::string>::const_iterator) const {
-                throw ParameterError("The parameter is not a string");
-            }
-
-            /// clone generates a copy of the parameter.
-            virtual std::unique_ptr<Parameter> clone() const = 0;
-
-            /// load is called by a parent parameter when loading JSON data.
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) = 0;
-
-            /// load sets the parameter value from an other parameter.
-            /// The other parameter must a subset of this parameter, and is validated in the process.
-            virtual void load(const Parameter& parameter) = 0;
-
-        protected:
-
-            /// trim removes white space and line break characters.
-            static const std::string::const_iterator trim(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& lineCount) {
-                auto trimIterator = begin;
-                for (; trimIterator != fileEnd && hasCharacter(whitespaceCharacters, *trimIterator); ++trimIterator) {
-                    if (*trimIterator == '\n') {
-                        ++lineCount;
-                    }
-                }
-                return trimIterator;
-            }
-
-            /// hasCharacter determines wheter a character is in a string of characters.
-            static constexpr bool hasCharacter(const char* characters, const char character) {
-                return *characters != '\0' && (*characters == character || hasCharacter(characters + 1, character));
-            }
-
-            static constexpr const char* whitespaceCharacters = " \n\t\v\f\r\0";
-            static constexpr const char* separationCharacters = ",}]\0";
-    };
-
-    /// ObjectParameter is a specialised parameter which contains other parameters.
-    class ObjectParameter : public Parameter {
-        public:
-            ObjectParameter() : Parameter() {}
-            template <typename StringType, typename ParameterUniquePtrType, typename... Rest>
-            ObjectParameter(StringType&& key, ParameterUniquePtrType&& parameter, Rest&&... rest) :
-                ObjectParameter(std::forward<Rest>(rest)...)
-            {
-                _parameterByKey.insert(std::make_pair(std::forward<StringType>(key), std::move(std::forward<ParameterUniquePtrType>(parameter))));
-            }
-            ObjectParameter(std::unordered_map<std::string, std::unique_ptr<Parameter>> parameterByKey) :
-                ObjectParameter()
-            {
-                _parameterByKey = std::move(parameterByKey);
-            }
-            ObjectParameter(const ObjectParameter&) = delete;
-            ObjectParameter(ObjectParameter&&) = default;
-            ObjectParameter& operator=(const ObjectParameter&) = delete;
-            ObjectParameter& operator=(ObjectParameter&&) = default;
-            virtual ~ObjectParameter() {}
-            const ListParameter& getListParameter(
-                const std::vector<std::string>::const_iterator key,
-                const std::vector<std::string>::const_iterator end
-            ) const override {
-                if (key == end) {
-                    throw ParameterError("not enough keys");
-                }
-                return _parameterByKey.at(*key)->getListParameter(key + 1, end);
-            }
-            bool getBoolean(const std::vector<std::string>::const_iterator key, const std::vector<std::string>::const_iterator end) const override {
-                if (key == end) {
-                    throw ParameterError("not enough keys");
-                }
-                return _parameterByKey.at(*key)->getBoolean(key + 1, end);
-            }
-            double getNumber(const std::vector<std::string>::const_iterator key, const std::vector<std::string>::const_iterator end) const override {
-                if (key == end) {
-                    throw ParameterError("not enough keys");
-                }
-                return _parameterByKey.at(*key)->getNumber(key + 1, end);
-            }
-            virtual std::string getString(const std::vector<std::string>::const_iterator key, const std::vector<std::string>::const_iterator end) const override {
-                if (key == end) {
-                    throw ParameterError("not enough keys");
-                }
-                return _parameterByKey.at(*key)->getString(key + 1, end);
-            }
-            virtual std::unique_ptr<Parameter> clone() const override {
-                std::unordered_map<std::string, std::unique_ptr<Parameter>> newParameterByKey;
-                for (const auto& keyAndParameter : _parameterByKey) {
-                    newParameterByKey.insert(std::make_pair(keyAndParameter.first, keyAndParameter.second->clone()));
-                }
-                return sepia::make_unique<ObjectParameter>(std::move(newParameterByKey));
-            }
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
-                begin = trim(begin, fileEnd, line);
-                if (*begin != '{') {
-                    throw ParseError("the object does not begin with a brace", line);
-                }
-                ++begin;
-                auto status = ObjectExpecting::whitespace;
-                auto end = begin;
-                auto key = std::string();
-                for (; *end != '}';) {
-                    if (end == fileEnd) {
-                        throw ParseError("unexpected end of file (a closing brace might be missing)", line);
-                    }
-                    switch (status) {
-                        case ObjectExpecting::whitespace:
-                            end = trim(end, fileEnd, line);
-                            status = ObjectExpecting::key;
-                            break;
-                        case ObjectExpecting::key:
-                            if (*end != '"') {
-                                throw ParseError("the key does not start with quotes", line);
-                            }
-                            ++end;
-                            status = ObjectExpecting::firstKeyLetter;
-                            break;
-                        case ObjectExpecting::firstKeyLetter:
-                            if (*end == '"') {
-                                throw ParseError("the key is an empty string", line);
-                            }
-                            begin = end;
-                            ++end;
-                            status = ObjectExpecting::keyLetter;
-                            break;
-                        case ObjectExpecting::keyLetter:
-                            if (*end == '"') {
-                                key = std::string(begin, end);
-                                ++end;
-                                end = trim(end, fileEnd, line);
-                                status = ObjectExpecting::keySeparator;
-                            } else {
-                                ++end;
-                            }
-                            break;
-                        case ObjectExpecting::keySeparator:
-                            if (*end != ':') {
-                                throw ParseError("key separator ':' not found", line);
-                            }
-                            ++end;
-                            status = ObjectExpecting::field;
-                            break;
-                        case ObjectExpecting::field:
-                            if (_parameterByKey.find(key) == _parameterByKey.end()) {
-                                throw ParseError("unexpected key " + key, line);
-                            }
-                            end = _parameterByKey[key]->load(end, fileEnd, line);
-
-                            status = ObjectExpecting::fieldSeparator;
-                            break;
-                        case ObjectExpecting::fieldSeparator:
-                            if (*end != ',') {
-                                throw ParseError("field separator ',' not found", line);
-                            }
-                            ++end;
-                            status = ObjectExpecting::whitespace;
-                            break;
-                    }
-                }
-                ++end;
-                return trim(end, fileEnd, line);
-            }
-            virtual void load(const Parameter& parameter) override {
-                try {
-                    const auto& objectParameter = dynamic_cast<const ObjectParameter&>(parameter);
-                    for (const auto& keyAndParameter : objectParameter) {
-                        if (_parameterByKey.find(keyAndParameter.first) == _parameterByKey.end()) {
-                            throw std::runtime_error("Unexpected key " + keyAndParameter.first);
-                        }
-                        _parameterByKey[keyAndParameter.first]->load(*keyAndParameter.second);
-                    }
-                } catch (const std::bad_cast& exception) {
-                    throw std::logic_error("Expected an ObjectParameter, got a " + std::string(typeid(parameter).name()));
-                }
-            }
-
-            /// begin returns an iterator to the beginning of the contained parameters map.
-            virtual std::unordered_map<std::string, std::unique_ptr<Parameter>>::const_iterator begin() const {
-                return _parameterByKey.begin();
-            }
-
-            /// end returns an iterator to the end of the contained parameters map.
-            virtual std::unordered_map<std::string, std::unique_ptr<Parameter>>::const_iterator end() const {
-                return _parameterByKey.end();
-            }
-
-        protected:
-            /// ObjectExpecting describes the next character expected by the parser.
-            enum class ObjectExpecting {
-                whitespace,
-                key,
-                firstKeyLetter,
-                keyLetter,
-                keySeparator,
-                field,
-                fieldSeparator,
-            };
-
-            std::unordered_map<std::string, std::unique_ptr<Parameter>> _parameterByKey;
-    };
-
-    /// ListParameter is a specialised parameter which contains other parameters.
-    class ListParameter : public Parameter {
-        public:
-            /// makeEmpty generates an empty list parameter with the given value as template.
-            static std::unique_ptr<ListParameter> makeEmpty(std::unique_ptr<Parameter> templateParameter) {
-                return sepia::make_unique<ListParameter>(std::vector<std::unique_ptr<Parameter>>(), std::move(templateParameter));
-            }
-
-            template <typename ParameterUniquePtrType>
-            ListParameter(ParameterUniquePtrType&& parameter) :
-                Parameter(),
-                _templateParameter(parameter->clone())
-            {
-                _parameters.push_back(std::move(parameter));
-            }
-            template <typename ParameterUniquePtrType, typename... Rest>
-            ListParameter(ParameterUniquePtrType&& parameter, Rest&&... rest) :
-                ListParameter(std::forward<Rest>(rest)...)
-            {
-                _parameters.insert(_parameters.begin(), std::move(std::forward<ParameterUniquePtrType>(parameter)));
-            }
-            ListParameter(std::vector<std::unique_ptr<Parameter>> parameters, std::unique_ptr<Parameter> templateParameter) :
-                Parameter(),
-                _parameters(std::move(parameters)),
-                _templateParameter(std::move(templateParameter))
-            {
-            }
-            ListParameter(const ListParameter&) = delete;
-            ListParameter(ListParameter&&) = default;
-            ListParameter& operator=(const ListParameter&) = delete;
-            ListParameter& operator=(ListParameter&&) = default;
-            virtual ~ListParameter() {}
-            virtual const ListParameter& getListParameter(
-                const std::vector<std::string>::const_iterator key,
-                const std::vector<std::string>::const_iterator end
-            ) const override {
-                if (key != end) {
-                    throw ParameterError("too many keys");
-                }
-                return *this;
-            }
-            virtual std::unique_ptr<Parameter> clone() const override {
-                std::vector<std::unique_ptr<Parameter>> newParameters;
-                for (const auto& parameter : _parameters) {
-                    newParameters.push_back(parameter->clone());
-                }
-                return sepia::make_unique<ListParameter>(std::move(newParameters), _templateParameter->clone());
-            }
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
-                _parameters.clear();
-                begin = trim(begin, fileEnd, line);
-                if (*begin != '[') {
-                    throw ParseError("the list does not begin with a bracket", line);
-                }
-                ++begin;
-                auto status = ListExpecting::whitespace;
-                auto end = begin;
-                auto key = std::string();
-                for (; *end != ']';) {
-                    if (end == fileEnd) {
-                        throw ParseError("unexpected end of file (a closing brace might be missing)", line);
-                    }
-                    switch (status) {
-                        case ListExpecting::whitespace:
-                            end = trim(end, fileEnd, line);
-                            status = ListExpecting::field;
-                            break;
-                        case ListExpecting::field:
-                            _parameters.push_back(_templateParameter->clone());
-                            end = _parameters.back()->load(end, fileEnd, line);
-                            status = ListExpecting::fieldSeparator;
-                            break;
-                        case ListExpecting::fieldSeparator:
-                            if (*end != ',') {
-                                throw ParseError("field separator ',' not found", line);
-                            }
-                            ++end;
-                            status = ListExpecting::whitespace;
-                            break;
-                    }
-                }
-                ++end;
-                return trim(end, fileEnd, line);
-            }
-            virtual void load(const Parameter& parameter) override {
-                try {
-                    const ListParameter& listParameter = dynamic_cast<const ListParameter&>(parameter);
-                    _parameters.clear();
-                    for (const auto& storedParameter : listParameter) {
-                        auto newParameter = _templateParameter->clone();
-                        newParameter->load(*storedParameter);
-                        _parameters.push_back(std::move(newParameter));
-                    }
-                } catch (const std::bad_cast& exception) {
-                    throw std::logic_error("Expected an ObjectParameter, got a " + std::string(typeid(parameter).name()));
-                }
-            }
-
-            /// size returns the list number of elements
-            virtual std::size_t size() const {
-                return _parameters.size();
-            }
-
-            /// begin returns an iterator to the beginning of the contained parameters vector.
-            virtual std::vector<std::unique_ptr<Parameter>>::const_iterator begin() const {
-                return _parameters.begin();
-            }
-
-            /// end returns an iterator to the end of the contained parameters vector.
-            virtual std::vector<std::unique_ptr<Parameter>>::const_iterator end() const {
-                return _parameters.end();
-            }
-
-        protected:
-
-            /// ListExpecting describes the next character expected by the parser.
-            enum class ListExpecting {
-                whitespace,
-                field,
-                fieldSeparator,
-            };
-
-            std::vector<std::unique_ptr<Parameter>> _parameters;
-            std::unique_ptr<Parameter> _templateParameter;
-    };
-
-    /// BooleanParameter is a specialised parameter for boolean values.
-    class BooleanParameter : public Parameter {
-        public:
-            BooleanParameter(bool value) :
-                Parameter(),
-                _value(value)
-            {
-            }
-            BooleanParameter(const BooleanParameter&) = delete;
-            BooleanParameter(BooleanParameter&&) = default;
-            BooleanParameter& operator=(const BooleanParameter&) = delete;
-            BooleanParameter& operator=(BooleanParameter&&) = default;
-            virtual ~BooleanParameter() {}
-            virtual bool getBoolean(const std::vector<std::string>::const_iterator key, const std::vector<std::string>::const_iterator end) const override {
-                if (key != end) {
-                    throw ParameterError("too many keys");
-                }
-                return _value;
-            }
-            virtual std::unique_ptr<Parameter> clone() const override {
-                return sepia::make_unique<BooleanParameter>(_value);
-            }
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
-                begin = trim(begin, fileEnd, line);
-                auto end = begin;
-                for (; !hasCharacter(separationCharacters, *end) && !hasCharacter(whitespaceCharacters, *end); ++end) {
-                    if (end == fileEnd) {
-                        throw ParseError("unexpected end of file", line);
-                    }
-                }
-                const auto trimmedJsonData = std::string(begin, end);
-                if (trimmedJsonData == "true") {
-                    _value = true;
-                } else if (trimmedJsonData == "false") {
-                    _value = false;
-                } else {
-                    throw ParseError("expected a boolean", line);
-                }
-                return trim(end, fileEnd, line);
-            }
-            virtual void load(const Parameter& parameter) override {
-                try {
-                    _value = parameter.getBoolean({});
-                } catch (const ParameterError& exception) {
-                    throw std::logic_error("Expected a BooleanParameter, got a " + std::string(typeid(parameter).name()));
-                }
-            }
-
-        protected:
-            bool _value;
-    };
-
-    /// NumberParameter is a specialised parameter for numeric values.
-    class NumberParameter : public Parameter {
-        public:
-            NumberParameter(double value, double minimum, double maximum, bool isInteger) :
-                Parameter(),
-                _value(value),
-                _minimum(minimum),
-                _maximum(maximum),
-                _isInteger(isInteger)
-            {
-                validate();
-            }
-            NumberParameter(const NumberParameter&) = delete;
-            NumberParameter(NumberParameter&&) = default;
-            NumberParameter& operator=(const NumberParameter&) = delete;
-            NumberParameter& operator=(NumberParameter&&) = default;
-            virtual ~NumberParameter() {}
-            virtual double getNumber(const std::vector<std::string>::const_iterator key, const std::vector<std::string>::const_iterator end) const override {
-                if (key != end) {
-                    throw ParameterError("too many keys");
-                }
-                return _value;
-            }
-            virtual std::unique_ptr<Parameter> clone() const override {
-                return sepia::make_unique<NumberParameter>(_value, _minimum, _maximum, _isInteger);
-            }
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
-                begin = trim(begin, fileEnd, line);
-                auto end = begin;
-                for (; !hasCharacter(separationCharacters, *end) && !hasCharacter(whitespaceCharacters, *end); ++end) {
-                    if (end == fileEnd) {
-                        throw ParseError("unexpected end of file", line);
-                    }
-                }
-                try {
-                    _value = std::stod(std::string(begin, end));
-                } catch (const std::invalid_argument&) {
-                    throw ParseError("expected a number", line);
-                }
-                try {
-                    validate();
-                } catch (const ParameterError& exception) {
-                    throw ParseError(exception.what(), line);
-                }
-                return trim(end, fileEnd, line);
-            }
-            virtual void load(const Parameter& parameter) override {
-                try {
-                    _value = parameter.getNumber({});
-                } catch (const ParameterError& exception) {
-                    throw std::logic_error("Expected a NumberParameter, got a " + std::string(typeid(parameter).name()));
-                }
-                validate();
-            }
-
-        protected:
-
-            /// validate determines if the number is valid regarding the given constraints.
-            void validate() {
-                if (std::isnan(_value)) {
-                    throw ParameterError("expected a number");
-                }
-                if (_value >= _maximum) {
-                    throw ParameterError(std::string("larger than maximum ") + std::to_string(_maximum));
-                }
-                if (_value < _minimum) {
-                    throw ParameterError(std::string("smaller than minimum ") + std::to_string(_minimum));
-                }
-                auto integerPart = 0.0;
-                if (_isInteger && std::modf(_value, &integerPart) != 0.0) {
-                    throw ParameterError("expected an integer");
-                }
-            }
-
-            double _value;
-            double _minimum;
-            double _maximum;
-            bool _isInteger;
-    };
-
-    /// CharParameter is a specialised number parameter for char numeric values.
-    class CharParameter : public NumberParameter {
-        public:
-            CharParameter(double value) :
-                NumberParameter(value, 0, 256, true)
-            {
-            }
-            CharParameter(const CharParameter&) = delete;
-            CharParameter(CharParameter&&) = default;
-            CharParameter& operator=(const CharParameter&) = delete;
-            CharParameter& operator=(CharParameter&&) = default;
-            virtual ~CharParameter() {}
-            virtual std::unique_ptr<Parameter> clone() const override {
-                return sepia::make_unique<CharParameter>(_value);
-            }
-    };
-
-    /// StringParameter is a specialised parameter for string values.
-    class StringParameter : public Parameter {
-        public:
-            StringParameter(const std::string& value) :
-                Parameter(),
-                _value(value)
-            {
-            }
-            StringParameter(const StringParameter&) = delete;
-            StringParameter(StringParameter&&) = default;
-            StringParameter& operator=(const StringParameter&) = delete;
-            StringParameter& operator=(StringParameter&&) = default;
-            virtual ~StringParameter() {}
-            virtual std::string getString(const std::vector<std::string>::const_iterator key, const std::vector<std::string>::const_iterator end) const override {
-                if (key != end) {
-                    throw ParameterError("too many keys");
-                }
-                return _value;
-            }
-            virtual std::unique_ptr<Parameter> clone() const override {
-                return sepia::make_unique<StringParameter>(_value);
-            }
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
-                begin = trim(begin, fileEnd, line);
-                if (*begin != '"') {
-                    throw ParseError("the string does not start with quotes", line);
-                }
-                ++begin;
-                auto end = begin;
-                for (; *end != '"'; ++end) {
-                    if (end == fileEnd) {
-                        throw ParseError("unexpected end of file", line);
-                    }
-
-                    if (*end == '\n') {
-                        throw ParseError("strings cannot contain linebreaks", line);
-                    }
-                }
-                _value = std::string(begin, end);
-                ++end;
-                return trim(end, fileEnd, line);
-            }
-            virtual void load(const Parameter& parameter) override {
-                try {
-                    _value = parameter.getString({});
-                } catch (const ParameterError& exception) {
-                    throw std::logic_error("Expected a StringParameter, got a " + std::string(typeid(parameter).name()));
-                }
-            }
-
-        protected:
-            std::string _value;
-    };
-
-    /// EnumParameter is a specialised parameter for string values with a given set of possible values.
-    class EnumParameter : public StringParameter {
-        public:
-            EnumParameter(const std::string& value, const std::unordered_set<std::string>& availableValues) :
-                StringParameter(value),
-                _availableValues(availableValues)
-            {
-                if (_availableValues.size() == 0) {
-                    throw ParameterError("an enum parameter needs at least one available value");
-                }
-                validate();
-            }
-            EnumParameter(const EnumParameter&) = delete;
-            EnumParameter(EnumParameter&&) = default;
-            EnumParameter& operator=(const EnumParameter&) = delete;
-            EnumParameter& operator=(EnumParameter&&) = default;
-            virtual ~EnumParameter() {}
-            virtual std::unique_ptr<Parameter> clone() const override {
-                return sepia::make_unique<EnumParameter>(_value, _availableValues);
-            }
-            virtual std::string::const_iterator load(std::string::const_iterator begin, std::string::const_iterator fileEnd, uint32_t& line) override {
-                begin = trim(begin, fileEnd, line);
-                if (*begin != '"') {
-                    throw ParseError("the string does not start with quotes", line);
-                }
-                ++begin;
-                auto end = begin;
-                for (; *end != '"'; ++end) {
-                    if (end == fileEnd) {
-                        throw ParseError("unexpected end of file", line);
-                    }
-
-                    if (*end == '\n') {
-                        throw ParseError("strings cannot contain linebreaks", line);
-                    }
-                }
-                _value = std::string(begin, end);
-                try {
-                    validate();
-                } catch (const ParameterError& exception) {
-                    throw ParseError(exception.what(), line);
-                }
-                ++end;
-                return trim(end, fileEnd, line);
-            }
-            virtual void load(const Parameter& parameter) override {
-                try {
-                    _value = parameter.getString({});
-                } catch (const ParameterError& exception) {
-                    throw std::logic_error("Expected an EnumParameter, got a " + std::string(typeid(parameter).name()));
-                }
-                validate();
-            }
-
-        protected:
-
-            /// validate determines if the enum is valid regarding the given constraints.
-            void validate() {
-                if (_availableValues.find(_value) == _availableValues.end()) {
-                    auto availableValuesString = std::string("{");
-                    for (const auto& availableValue : _availableValues) {
-                        if (availableValuesString != "{") {
-                            availableValuesString += ", ";
-                        }
-                        availableValuesString += availableValue;
-                    }
-                    availableValuesString += "}";
-                    throw ParameterError("The value " + _value + " should be one of " + availableValuesString);
-                }
-            }
-
-            std::unordered_set<std::string> _availableValues;
-    };
-
-    /// UnvalidatedParameter represents either a parameter subset or a JSON filename to be validated against a complete parameter.
-    /// It mimics a union behavior with poor memory management. However, the lifecycles of its attributes are properly managed.
-    /// The class handles file reading when constructed with a JSON filename.
-    class UnvalidatedParameter {
-        public:
-            UnvalidatedParameter(const std::string& jsonFilename) :
-                _isString(true)
-            {
-                if (jsonFilename != "") {
-                    std::ifstream file(jsonFilename);
-                    if (!file.good()) {
-                        throw UnreadableFile(jsonFilename);
-                    }
-                    file.seekg(0, std::fstream::end);
-                    _jsonData.reserve(std::size_t(file.tellg()));
-                    file.seekg(0, std::fstream::beg);
-                    _jsonData.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-                }
-            }
-            UnvalidatedParameter(std::unique_ptr<Parameter> parameter) :
-                _isString(false),
-                _parameter(std::move(parameter))
-            {
-            }
-            UnvalidatedParameter(const UnvalidatedParameter&) = delete;
-            UnvalidatedParameter(UnvalidatedParameter&&) = default;
-            UnvalidatedParameter& operator=(const UnvalidatedParameter&) = delete;
-            UnvalidatedParameter& operator=(UnvalidatedParameter&&) = default;
-            virtual ~UnvalidatedParameter() {}
-
-            /// isString returns true if the object was constructed as a string.
-            virtual bool isString() const {
-                return _isString;
-            }
-
-            /// jsonData returns the json data inside the given filename.
-            /// An error is thrown if the object was constructed with a parameter.
-            virtual const std::string& jsonData() const {
-                if (!_isString) {
-                    throw ParameterError("The unvalidated parameter is not a string");
-                }
-                return _jsonData;
-            }
-
-            /// parameter returns the provided parameter.
-            /// An error is thrown if the object was consrtructed with a string.
-            virtual const Parameter& parameter() const {
-                if (_isString) {
-                    throw ParameterError("The unvalidated parameter is not a parameter");
-                }
-                return *_parameter;
-            }
-
-        protected:
-            bool _isString;
-            std::string _jsonData;
-            std::unique_ptr<Parameter> _parameter;
-    };
-
-    /// SpecialisedCamera represents a template-specialised generic event-based camera.
-    template <typename EventType, typename HandleEvent, typename HandleException>
-    class SpecialisedCamera {
-        public:
-            SpecialisedCamera(
-                HandleEvent handleEvent,
-                HandleException handleException,
-                const std::size_t& fifoSize,
-                const std::chrono::milliseconds& sleepDuration
-            ) :
-                _handleEvent(std::forward<HandleEvent>(handleEvent)),
-                _handleException(std::forward<HandleException>(handleException)),
-                _bufferRunning(true),
-                _sleepDuration(sleepDuration),
-                _head(0),
-                _tail(0)
-            {
-                _events.resize(fifoSize);
-                _bufferLoop = std::thread([this]() -> void {
-                    try {
-                        EventType event;
-                        while (_bufferRunning.load(std::memory_order_relaxed)) {
-                            const auto currentHead = _head.load(std::memory_order_relaxed);
-                            if (currentHead == _tail.load(std::memory_order_acquire)) {
-                                std::this_thread::sleep_for(_sleepDuration);
-                            } else {
-                                event = _events[currentHead];
-                                _head.store((currentHead + 1) % _events.size(), std::memory_order_release);
-                                this->_handleEvent(event);
-                            }
-                        }
-                    } catch (...) {
-                        this->_handleException(std::current_exception());
-                    }
-                });
-            }
-            SpecialisedCamera(const SpecialisedCamera&) = delete;
-            SpecialisedCamera(SpecialisedCamera&&) = default;
-            SpecialisedCamera& operator=(const SpecialisedCamera&) = delete;
-            SpecialisedCamera& operator=(SpecialisedCamera&&) = default;
-            virtual ~SpecialisedCamera() {
-                _bufferRunning.store(false, std::memory_order_relaxed);
-                _bufferLoop.join();
-            }
-
-            /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
-            /// If the event could not be inserted (FIFO full), false is returned.
-            virtual bool push(EventType event) {
-                const auto currentTail = _tail.load(std::memory_order_relaxed);
-                const auto nextTail = (currentTail + 1) % _events.size();
-                if (nextTail != _head.load(std::memory_order_acquire)) {
-                    _events[currentTail] = event;
-                    _tail.store(nextTail, std::memory_order_release);
-                    return true;
-                }
-                return false;
-            }
-
-        protected:
-            HandleEvent _handleEvent;
-            HandleException _handleException;
-            std::thread _bufferLoop;
-            std::atomic_bool _bufferRunning;
-            const std::chrono::milliseconds _sleepDuration;
-            std::atomic<std::size_t> _head;
-            std::atomic<std::size_t> _tail;
-            std::vector<EventType> _events;
+        handle_event_t _handle_event;
+        handle_exception_t _handle_exception;
+        std::thread _buffer_loop;
+        std::atomic_bool _buffer_running;
+        const std::chrono::milliseconds _sleep_duration;
+        std::atomic<std::size_t> _head;
+        std::atomic<std::size_t> _tail;
+        std::vector<event_t> _events;
     };
 }
