@@ -468,7 +468,7 @@ namespace sepia {
             typename std::enable_if < index<sizeof...(exceptions_t), void>::type catch_index() {
             using exception_t = typename std::tuple_element<index, std::tuple<exceptions_t...>>::type;
             try {
-                catch_index<index + 1>();
+                catch_index<index + 1, exceptions_t...>();
             } catch (const exception_t&) {
                 return;
             }
@@ -477,7 +477,7 @@ namespace sepia {
         /// catch_index is a termination for the template loop.
         template <std::size_t index, typename... exceptions_t>
         typename std::enable_if<index == sizeof...(exceptions_t), void>::type catch_index() {
-            throw _exception;
+            std::rethrow_exception(_exception);
         }
 
         std::mutex _mutex;
