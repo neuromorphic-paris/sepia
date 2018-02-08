@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -194,9 +195,9 @@ namespace sepia {
 
     /// write_header writes the header bytes to an byte stream.
     inline void write_header(std::ostream& event_stream, uint8_t event_type) {
-            event_stream.write("Event Stream", 12);
-            event_stream.write(reinterpret_cast<char*>(version().data()), version().size());
-            event_stream.put(*reinterpret_cast<char*>(&event_type));
+        event_stream.write("Event Stream", 12);
+        event_stream.write(reinterpret_cast<char*>(version().data()), version().size());
+        event_stream.put(*reinterpret_cast<char*>(&event_type));
     }
 
     /// read_header consumes the header bytes from a bytes stream.
@@ -455,16 +456,30 @@ namespace sepia {
             }
         }
 
-        /// throw_if_not_end_of_file raises the internally held exception if it is not an end-of-file exception.
-        virtual void throw_if_not_end_of_file() {
+        /// rethrow_unless raises the internally held exception unless it matches one of the given types.
+        template <typename... exceptions_t>
+        void rethrow_unless() {
+            catch_index<0, exceptions_t...>();
+        }
+
+        protected:
+        /// catch_index catches the n-th exception type.
+        template <std::size_t index, typename... exceptions_t>
+            typename std::enable_if < index<sizeof...(exceptions_t), void>::type catch_index() {
+            using exception_t = typename std::tuple_element<index, std::tuple<exceptions_t...>>::type;
             try {
-                std::rethrow_exception(_exception);
-            } catch (const end_of_file&) {
+                catch_index<index + 1>();
+            } catch (const exception_t&) {
                 return;
             }
         }
 
-        protected:
+        /// catch_index is a termination for the template loop.
+        template <std::size_t index, typename... exceptions_t>
+        typename std::enable_if<index == sizeof...(exceptions_t), void>::type catch_index() {
+            throw _exception;
+        }
+
         std::mutex _mutex;
         std::condition_variable _condition_variable;
         std::exception_ptr _exception;
@@ -726,7 +741,7 @@ namespace sepia {
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
         capture_exception.wait();
-        capture_exception.throw_if_not_end_of_file();
+        capture_exception.rethrow_unless<end_of_file>();
     }
 
     /// dvs_event_stream_writer writes events to an Event Stream file.
@@ -944,7 +959,7 @@ namespace sepia {
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
         capture_exception.wait();
-        capture_exception.throw_if_not_end_of_file();
+        capture_exception.rethrow_unless<end_of_file>();
     }
 
     /// atis_event_stream_writer writes events to an Event Stream file.
@@ -1165,7 +1180,7 @@ namespace sepia {
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
         capture_exception.wait();
-        capture_exception.throw_if_not_end_of_file();
+        capture_exception.rethrow_unless<end_of_file>();
     }
 
     /// color_event_stream_writer writes events to a color Event Stream file.
@@ -1394,7 +1409,7 @@ namespace sepia {
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
         capture_exception.wait();
-        capture_exception.throw_if_not_end_of_file();
+        capture_exception.rethrow_unless<end_of_file>();
     }
 
     /// Forward-declare base_parameter for referencing in unvalidated_parameter.
