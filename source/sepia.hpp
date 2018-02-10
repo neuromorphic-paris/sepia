@@ -428,16 +428,16 @@ namespace sepia {
         }
     };
 
-    /// capture_exception_t stores an exception pointer and notifies a condition variable.
+    /// capture_exception stores an exception pointer and notifies a condition variable.
     /// It is used internally by join_ functions.
-    class capture_exception_t {
+    class capture_exception {
         public:
-        capture_exception_t() {}
-        capture_exception_t(const capture_exception_t&) = delete;
-        capture_exception_t(capture_exception_t&&) = default;
-        capture_exception_t& operator=(const capture_exception_t&) = delete;
-        capture_exception_t& operator=(capture_exception_t&&) = default;
-        virtual ~capture_exception_t() {}
+        capture_exception() {}
+        capture_exception(const capture_exception&) = delete;
+        capture_exception(capture_exception&&) = default;
+        capture_exception& operator=(const capture_exception&) = delete;
+        capture_exception& operator=(capture_exception&&) = default;
+        virtual ~capture_exception() {}
 
         /// operator() handles an exception.
         virtual void operator()(std::exception_ptr exception) {
@@ -732,16 +732,16 @@ namespace sepia {
     /// of the input file is reached.
     template <typename handle_event_t>
     void join(const std::string& filename, handle_event_t handle_event, std::size_t chunk_size = 1 << 10) {
-        capture_exception_t capture_exception;
+        capture_exception capture_observable_exception;
         auto generic_event_stream_observable = make_generic_event_stream_observable(
             filename,
             std::forward<handle_event_t>(handle_event),
-            std::ref(capture_exception),
+            std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.wait();
-        capture_exception.rethrow_unless<end_of_file>();
+        capture_observable_exception.wait();
+        capture_observable_exception.rethrow_unless<end_of_file>();
     }
 
     /// dvs_event_stream_writer writes events to an Event Stream file.
@@ -950,16 +950,16 @@ namespace sepia {
         const std::string& filename,
         handle_event_t handle_event,
         std::size_t chunk_size = 1 << 10) {
-        capture_exception_t capture_exception;
+        capture_exception capture_observable_exception;
         auto dvs_event_stream_observable = make_dvs_event_stream_observable(
             filename,
             std::forward<handle_event_t>(handle_event),
-            std::ref(capture_exception),
+            std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.wait();
-        capture_exception.rethrow_unless<end_of_file>();
+        capture_observable_exception.wait();
+        capture_observable_exception.rethrow_unless<end_of_file>();
     }
 
     /// atis_event_stream_writer writes events to an Event Stream file.
@@ -1171,16 +1171,16 @@ namespace sepia {
         const std::string& filename,
         handle_event_t handle_event,
         std::size_t chunk_size = 1 << 10) {
-        capture_exception_t capture_exception;
+        capture_exception capture_observable_exception;
         auto atis_event_stream_observable = make_atis_event_stream_observable(
             filename,
             std::forward<handle_event_t>(handle_event),
-            std::ref(capture_exception),
+            std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.wait();
-        capture_exception.rethrow_unless<end_of_file>();
+        capture_observable_exception.wait();
+        capture_observable_exception.rethrow_unless<end_of_file>();
     }
 
     /// color_event_stream_writer writes events to a color Event Stream file.
@@ -1400,16 +1400,16 @@ namespace sepia {
         const std::string& filename,
         handle_event_t handle_event,
         std::size_t chunk_size = 1 << 10) {
-        capture_exception_t capture_exception;
+        capture_exception capture_observable_exception;
         auto color_event_stream_observable = make_color_event_stream_observable(
             filename,
             std::forward<handle_event_t>(handle_event),
-            std::ref(capture_exception),
+            std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
             chunk_size);
-        capture_exception.wait();
-        capture_exception.rethrow_unless<end_of_file>();
+        capture_observable_exception.wait();
+        capture_observable_exception.rethrow_unless<end_of_file>();
     }
 
     /// Forward-declare base_parameter for referencing in unvalidated_parameter.
