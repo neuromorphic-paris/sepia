@@ -2,13 +2,17 @@
 #include "../source/sepia.hpp"
 #include "../third_party/Catch2/single_include/catch.hpp"
 
+TEST_CASE("Read DVS header type", "[sepia::read_type]") {
+    REQUIRE(sepia::read_type("../../test/dvs.es") == sepia::event_stream_type::dvs);
+}
+
+TEST_CASE("Read ATIS header type", "[sepia::read_type]") {
+    REQUIRE(sepia::read_type("../../test/atis.es") == sepia::event_stream_type::atis);
+}
+
 TEST_CASE("Count DVS events", "[sepia::dvs_event_stream_observable]") {
     std::size_t count = 0;
-    try {
-        sepia::join_dvs_event_stream_observable("../../test/dvs.es", [&](sepia::dvs_event) -> void { ++count; });
-    } catch (const std::exception& exception) {
-        FAIL(exception.what());
-    }
+    sepia::join_dvs_event_stream_observable("../../test/dvs.es", [&](sepia::dvs_event) -> void { ++count; });
     if (count != 2418241) {
         FAIL(
             "the event stream observable generated an unexpected number of events (expected 2418241, got "
@@ -18,11 +22,7 @@ TEST_CASE("Count DVS events", "[sepia::dvs_event_stream_observable]") {
 
 TEST_CASE("Count ATIS events", "[sepia::atis_event_stream_observable]") {
     std::size_t count = 0;
-    try {
-        sepia::join_atis_event_stream_observable("../../test/atis.es", [&](sepia::atis_event) -> void { ++count; });
-    } catch (const std::exception& exception) {
-        FAIL(exception.what());
-    }
+    sepia::join_atis_event_stream_observable("../../test/atis.es", [&](sepia::atis_event) -> void { ++count; });
     if (count != 2649650) {
         FAIL(
             "the event stream observable generated an unexpected number of events (expected 2418241, got "
