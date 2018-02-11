@@ -5,7 +5,7 @@
 TEST_CASE("Count DVS events", "[sepia::dvs_event_stream_observable]") {
     std::size_t count = 0;
     try {
-        sepia::join_dvs_event_stream_observable("../../test/dvs.es", [&](sepia::dvs_event_t) -> void { ++count; });
+        sepia::join_dvs_event_stream_observable("../../test/dvs.es", [&](sepia::dvs_event) -> void { ++count; });
     } catch (const std::exception& exception) {
         FAIL(exception.what());
     }
@@ -19,7 +19,7 @@ TEST_CASE("Count DVS events", "[sepia::dvs_event_stream_observable]") {
 TEST_CASE("Count ATIS events", "[sepia::atis_event_stream_observable]") {
     std::size_t count = 0;
     try {
-        sepia::join_atis_event_stream_observable("../../test/atis.es", [&](sepia::atis_event_t) -> void { ++count; });
+        sepia::join_atis_event_stream_observable("../../test/atis.es", [&](sepia::atis_event) -> void { ++count; });
     } catch (const std::exception& exception) {
         FAIL(exception.what());
     }
