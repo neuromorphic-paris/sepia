@@ -20,10 +20,23 @@
 /// sepia bundles functions and classes to represent a camera and handle its raw stream of events.
 namespace sepia {
 
-    /// version returns the implement Event Stream version.
-    inline std::array<uint8_t, 3> version() {
+    /// event_stream_version returns the implemented Event Stream version.
+    inline std::array<uint8_t, 3> event_stream_version() {
         return {2, 0, 0};
     }
+
+    /// event_stream_signature returns the Event Stream format signature.
+    inline std::string event_stream_signature() {
+        return "Event Stream";
+    }
+
+    /// event_stream_type associates an Event Stream type name with its byte.
+    enum class event_stream_type : uint8_t {
+        generic = 0,
+        dvs = 1,
+        atis = 2,
+        color = 4,
+    };
 
     /// make_unique creates a unique_ptr.
     template <typename T, typename... Args>
@@ -193,33 +206,76 @@ namespace sepia {
         parameter_error(const std::string& what) : std::logic_error(what) {}
     };
 
-    /// write_header writes the header bytes to an byte stream.
-    inline void write_header(std::ostream& event_stream, uint8_t event_type) {
-        event_stream.write("Event Stream", 12);
-        event_stream.write(reinterpret_cast<char*>(version().data()), version().size());
-        event_stream.put(*reinterpret_cast<char*>(&event_type));
-    }
-
-    /// read_header consumes the header bytes from a bytes stream.
-    inline void read_header(const std::string& filename, std::istream& event_stream, uint8_t expected_event_type) {
+    /// read_type opens the given Event Stream, checks its header and retrieves the stream type.
+    inline event_stream_type read_type(const std::string& filename) {
+        std::ifstream event_stream(filename);
+        if (!event_stream.good()) {
+            throw unreadable_file(filename);
+        }
         {
-            std::string read_signature("Event Stream");
+            auto read_signature = event_stream_signature();
             event_stream.read(&read_signature[0], read_signature.size());
-            if (event_stream.eof() || read_signature != "Event Stream") {
+            if (event_stream.eof() || read_signature != event_stream_signature()) {
                 throw wrong_signature(filename);
             }
         }
         {
-            std::array<uint8_t, 3> event_stream_version;
-            event_stream.read(reinterpret_cast<char*>(event_stream_version.data()), event_stream_version.size());
-            if (event_stream.eof() || std::get<0>(event_stream_version) != std::get<0>(version())
-                || std::get<1>(event_stream_version) < std::get<1>(version())) {
+            std::array<uint8_t, 3> read_event_stream_version;
+            event_stream.read(
+                reinterpret_cast<char*>(read_event_stream_version.data()), read_event_stream_version.size());
+            if (event_stream.eof() || std::get<0>(read_event_stream_version) != std::get<0>(event_stream_version())
+                || std::get<1>(read_event_stream_version) < std::get<1>(event_stream_version())) {
                 throw unsupported_version(filename);
             }
         }
         {
-            const char raw_event_type = event_stream.get();
-            if (*reinterpret_cast<const uint8_t*>(&raw_event_type) != expected_event_type) {
+            const char type_char = event_stream.get();
+            const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
+            if (type_byte == static_cast<uint8_t>(event_stream_type::generic)) {
+                return event_stream_type::generic;
+            } else if (type_byte == static_cast<uint8_t>(event_stream_type::dvs)) {
+                return event_stream_type::dvs;
+            } else if (type_byte == static_cast<uint8_t>(event_stream_type::atis)) {
+                return event_stream_type::atis;
+            } else if (type_byte == static_cast<uint8_t>(event_stream_type::color)) {
+                return event_stream_type::color;
+            } else {
+                throw unsupported_event_type(filename);
+            }
+        }
+    }
+
+    /// write_header writes the header bytes to an byte stream.
+    inline void write_header(std::ostream& event_stream, event_stream_type event_stream_type) {
+        event_stream.write("Event Stream", 12);
+        event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
+        auto type_byte = static_cast<uint8_t>(event_stream_type);
+        event_stream.put(*reinterpret_cast<char*>(&type_byte));
+    }
+
+    /// read_header consumes the header bytes from a byte stream.
+    inline void
+    read_header(const std::string& filename, std::istream& event_stream, event_stream_type expected_event_stream_type) {
+        {
+            auto read_signature = event_stream_signature();
+            event_stream.read(&read_signature[0], read_signature.size());
+            if (event_stream.eof() || read_signature != event_stream_signature()) {
+                throw wrong_signature(filename);
+            }
+        }
+        {
+            std::array<uint8_t, 3> read_event_stream_version;
+            event_stream.read(
+                reinterpret_cast<char*>(read_event_stream_version.data()), read_event_stream_version.size());
+            if (event_stream.eof() || std::get<0>(read_event_stream_version) != std::get<0>(event_stream_version())
+                || std::get<1>(read_event_stream_version) < std::get<1>(event_stream_version())) {
+                throw unsupported_version(filename);
+            }
+        }
+        {
+            const char type_char = event_stream.get();
+            const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
+            if (type_byte != static_cast<uint8_t>(expected_event_stream_type)) {
                 throw unsupported_event_type(filename);
             }
         }
@@ -538,7 +594,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, 0);
+            write_header(_event_stream, event_stream_type::generic);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -677,14 +733,9 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, 0);
+            read_header(filename, _event_stream, event_stream_type::generic);
             _loop = std::thread(
-                read_and_dispatch<
-                    generic_event,
-                    handle_generic_byte,
-                    MustRestart,
-                    HandleEvent,
-                    HandleException>,
+                read_and_dispatch<generic_event, handle_generic_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
                 std::ref(_running),
                 dispatch,
@@ -731,7 +782,10 @@ namespace sepia {
     /// join_generic_event_stream_observable creates an event stream observable from functors and blocks until the end
     /// of the input file is reached.
     template <typename HandleEvent>
-    void join(const std::string& filename, HandleEvent handle_event, std::size_t chunk_size = 1 << 10) {
+    void join_generic_event_stream_observable(
+        const std::string& filename,
+        HandleEvent handle_event,
+        std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto generic_event_stream_observable = make_generic_event_stream_observable(
             filename,
@@ -799,7 +853,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, 1);
+            write_header(_event_stream, event_stream_type::dvs);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -897,7 +951,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, 1);
+            read_header(filename, _event_stream, event_stream_type::dvs);
             _loop = std::thread(
                 read_and_dispatch<dvs_event, handle_dvs_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -1018,7 +1072,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, 2);
+            write_header(_event_stream, event_stream_type::atis);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -1118,7 +1172,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, 2);
+            read_header(filename, _event_stream, event_stream_type::atis);
             _loop = std::thread(
                 read_and_dispatch<atis_event, handle_atis_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -1232,7 +1286,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, 4);
+            write_header(_event_stream, event_stream_type::color);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -1347,7 +1401,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, 4);
+            read_header(filename, _event_stream, event_stream_type::color);
             _loop = std::thread(
                 read_and_dispatch<color_event, handle_color_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -1536,8 +1590,8 @@ namespace sepia {
         template <typename String, typename Parameter, typename... Rest>
         object_parameter(String&& key, Parameter&& parameter, Rest&&... rest) :
             object_parameter(std::forward<Rest>(rest)...) {
-            _parameter_by_key.insert(std::make_pair(
-                std::forward<String>(key), std::move(std::forward<Parameter>(parameter))));
+            _parameter_by_key.insert(
+                std::make_pair(std::forward<String>(key), std::move(std::forward<Parameter>(parameter))));
         }
         object_parameter(std::unordered_map<std::string, std::unique_ptr<parameter>> parameter_by_key) :
             object_parameter() {
@@ -1710,8 +1764,7 @@ namespace sepia {
             _parameters.push_back(std::move(template_parameter));
         }
         template <typename Parameter, typename... Rest>
-        list_parameter(Parameter&& parameter, Rest&&... rest) :
-            list_parameter(std::forward<Rest>(rest)...) {
+        list_parameter(Parameter&& parameter, Rest&&... rest) : list_parameter(std::forward<Rest>(rest)...) {
             _parameters.insert(_parameters.begin(), std::move(std::forward<Parameter>(parameter)));
         }
         list_parameter(
