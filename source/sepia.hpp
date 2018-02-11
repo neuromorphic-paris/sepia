@@ -26,9 +26,9 @@ namespace sepia {
     }
 
     /// make_unique creates a unique_ptr.
-    template <typename type, typename... arguments_t>
-    std::unique_ptr<type> make_unique(arguments_t&&... arguments) {
-        return std::unique_ptr<type>(new type(std::forward<arguments_t>(arguments)...));
+    template <typename T, typename... Args>
+    std::unique_ptr<T> make_unique(Args&&... args) {
+        return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
     }
 
     /// false_function is a function returning false.
@@ -36,8 +36,8 @@ namespace sepia {
         return false;
     }
 
-    /// generic_event_t represents the parameters of a generic event.
-    struct generic_event_t {
+    /// generic_event represents the parameters of a generic event.
+    struct generic_event {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -48,8 +48,8 @@ namespace sepia {
         bool extra_bit;
     } __attribute__((packed));
 
-    /// dvs_event_t represents the parameters of a change detection.
-    struct dvs_event_t {
+    /// dvs_event represents the parameters of a change detection.
+    struct dvs_event {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -65,8 +65,8 @@ namespace sepia {
         bool is_increase;
     } __attribute__((packed));
 
-    /// atis_event_t represents the parameters of a change detection or an exposure measurement.
-    struct atis_event_t {
+    /// atis_event represents the parameters of a change detection or an exposure measurement.
+    struct atis_event {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -86,8 +86,8 @@ namespace sepia {
         bool polarity;
     } __attribute__((packed));
 
-    /// threshold_crossing_t represent the parameters of a threshold crossing.
-    struct threshold_crossing_t {
+    /// threshold_crossing represent the parameters of a threshold crossing.
+    struct threshold_crossing {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -103,8 +103,8 @@ namespace sepia {
         bool is_second;
     } __attribute__((packed));
 
-    /// color_event_t represents the parameters of a color event.
-    struct color_event_t {
+    /// color_event represents the parameters of a color event.
+    struct color_event {
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -226,12 +226,12 @@ namespace sepia {
     }
 
     /// split separates a stream of events into a stream of change detections and a stream of theshold crossings.
-    template <typename handle_dvs_event_t, typename handle_threshold_crossing_t>
+    template <typename HandleDvsEvent, typename HandleThresholdCrossing>
     class split {
         public:
-        split(handle_dvs_event_t handle_dvs_event, handle_threshold_crossing_t handle_threshold_crossing) :
-            _handle_dvs_event(std::forward<handle_dvs_event_t>(handle_dvs_event)),
-            _handle_threshold_crossing(std::forward<handle_threshold_crossing_t>(handle_threshold_crossing)) {}
+        split(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) :
+            _handle_dvs_event(std::forward<handle_dvs_event>(handle_dvs_event)),
+            _handle_threshold_crossing(std::forward<handle_threshold_crossing>(handle_threshold_crossing)) {}
         split(const split&) = delete;
         split(split&&) = default;
         split& operator=(const split&) = delete;
@@ -239,27 +239,27 @@ namespace sepia {
         virtual ~split() {}
 
         /// operator() handles an event.
-        virtual void operator()(atis_event_t atis_event) {
+        virtual void operator()(atis_event atis_event) {
             if (atis_event.is_threshold_crossing) {
                 _handle_threshold_crossing(
-                    threshold_crossing_t{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
+                    threshold_crossing{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
             } else {
-                _handle_dvs_event(dvs_event_t{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
+                _handle_dvs_event(dvs_event{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
             }
         }
 
         protected:
-        handle_dvs_event_t _handle_dvs_event;
-        handle_threshold_crossing_t _handle_threshold_crossing;
+        HandleDvsEvent _handle_dvs_event;
+        HandleThresholdCrossing _handle_threshold_crossing;
     };
 
     /// make_split creates a split from functors.
-    template <typename handle_dvs_event_t, typename handle_threshold_crossing_t>
-    split<handle_dvs_event_t, handle_threshold_crossing_t>
-    make_split(handle_dvs_event_t handle_dvs_event, handle_threshold_crossing_t handle_threshold_crossing) {
-        return split<handle_dvs_event_t, handle_threshold_crossing_t>(
-            std::forward<handle_dvs_event_t>(handle_dvs_event),
-            std::forward<handle_threshold_crossing_t>(handle_threshold_crossing));
+    template <typename HandleDvsEvent, typename HandleThresholdCrossing>
+    split<HandleDvsEvent, HandleThresholdCrossing>
+    make_split(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) {
+        return split<HandleDvsEvent, HandleThresholdCrossing>(
+            std::forward<HandleDvsEvent>(handle_dvs_event),
+            std::forward<HandleThresholdCrossing>(handle_threshold_crossing));
     }
 
     /// event_stream_observable is a base class for event stream observables.
@@ -282,22 +282,22 @@ namespace sepia {
         protected:
         /// read_and_dispatch implements a generic dispatch mechanism for event stream files.
         template <
-            typename event_t,
-            typename handle_byte_t,
-            typename must_restart_t,
-            typename handle_event_t,
-            typename handle_exception_t>
+            typename Event,
+            typename HandleByte,
+            typename MustRestart,
+            typename HandleEvent,
+            typename HandleException>
         static void read_and_dispatch(
             std::ifstream& event_stream,
             std::atomic_bool& running,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size,
-            handle_byte_t handle_byte,
-            must_restart_t must_restart,
-            handle_event_t handle_event,
-            handle_exception_t handle_exception) {
+            HandleByte handle_byte,
+            MustRestart must_restart,
+            HandleEvent handle_event,
+            HandleException handle_exception) {
             try {
-                event_t event;
+                Event event;
                 std::vector<uint8_t> bytes(chunk_size);
                 switch (dispatch) {
                     case event_stream_observable::dispatch::synchronously_but_skip_offset: {
@@ -457,26 +457,26 @@ namespace sepia {
         }
 
         /// rethrow_unless raises the internally held exception unless it matches one of the given types.
-        template <typename... exceptions_t>
+        template <typename... Exceptions>
         void rethrow_unless() {
-            catch_index<0, exceptions_t...>();
+            catch_index<0, Exceptions...>();
         }
 
         protected:
         /// catch_index catches the n-th exception type.
-        template <std::size_t index, typename... exceptions_t>
-            typename std::enable_if < index<sizeof...(exceptions_t), void>::type catch_index() {
-            using exception_t = typename std::tuple_element<index, std::tuple<exceptions_t...>>::type;
+        template <std::size_t index, typename... Exceptions>
+            typename std::enable_if < index<sizeof...(Exceptions), void>::type catch_index() {
+            using Exception = typename std::tuple_element<index, std::tuple<Exceptions...>>::type;
             try {
-                catch_index<index + 1, exceptions_t...>();
-            } catch (const exception_t&) {
+                catch_index<index + 1, Exceptions...>();
+            } catch (const Exception&) {
                 return;
             }
         }
 
         /// catch_index is a termination for the template loop.
-        template <std::size_t index, typename... exceptions_t>
-        typename std::enable_if<index == sizeof...(exceptions_t), void>::type catch_index() {
+        template <std::size_t index, typename... Exceptions>
+        typename std::enable_if<index == sizeof...(Exceptions), void>::type catch_index() {
             std::rethrow_exception(_exception);
         }
 
@@ -498,7 +498,7 @@ namespace sepia {
         virtual ~generic_event_stream_writer() {}
 
         /// operator() handles an event.
-        virtual void operator()(generic_event_t generic_event) {
+        virtual void operator()(generic_event generic_event) {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
@@ -567,7 +567,7 @@ namespace sepia {
     /// handle_generic_byte implements the event stream state machine for generic events.
     class handle_generic_byte {
         public:
-        handle_generic_byte() : _state(state::idle), _generic_event(generic_event_t{0, 0, false}) {}
+        handle_generic_byte() : _state(state::idle), _generic_event(generic_event{0, 0, false}) {}
         handle_generic_byte(const handle_generic_byte&) = default;
         handle_generic_byte(handle_generic_byte&&) = default;
         handle_generic_byte& operator=(const handle_generic_byte&) = default;
@@ -575,7 +575,7 @@ namespace sepia {
         virtual ~handle_generic_byte() {}
 
         /// operator() handles a byte.
-        virtual bool operator()(uint8_t byte, generic_event_t& generic_event) {
+        virtual bool operator()(uint8_t byte, generic_event& generic_event) {
             switch (_state) {
                 case state::idle: {
                     if ((byte & 0b1111111) == 0b1111111) {
@@ -658,18 +658,18 @@ namespace sepia {
         };
 
         state _state;
-        generic_event_t _generic_event;
+        generic_event _generic_event;
     };
 
     /// generic_event_stream_observable is a template-specialised event_stream_observable for generic events.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    template <typename HandleEvent, typename HandleException, typename MustRestart>
     class generic_event_stream_observable : public event_stream_observable {
         public:
         generic_event_stream_observable(
             const std::string& filename,
-            handle_event_t handle_event,
-            handle_exception_t handle_exception,
-            must_restart_t must_restart,
+            HandleEvent handle_event,
+            HandleException handle_exception,
+            MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
             _event_stream(filename, std::ifstream::binary),
@@ -680,19 +680,19 @@ namespace sepia {
             read_header(filename, _event_stream, 0);
             _loop = std::thread(
                 read_and_dispatch<
-                    generic_event_t,
+                    generic_event,
                     handle_generic_byte,
-                    must_restart_t,
-                    handle_event_t,
-                    handle_exception_t>,
+                    MustRestart,
+                    HandleEvent,
+                    HandleException>,
                 std::ref(_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
                 handle_generic_byte(),
-                std::forward<must_restart_t>(must_restart),
-                std::forward<handle_event_t>(handle_event),
-                std::forward<handle_exception_t>(handle_exception));
+                std::forward<MustRestart>(must_restart),
+                std::forward<HandleEvent>(handle_event),
+                std::forward<HandleException>(handle_exception));
         }
         generic_event_stream_observable(const generic_event_stream_observable&) = delete;
         generic_event_stream_observable(generic_event_stream_observable&&) = default;
@@ -710,32 +710,32 @@ namespace sepia {
     };
 
     /// make_generic_event_stream_observable creates an event stream observable from functors.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
-    std::unique_ptr<generic_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
+    std::unique_ptr<generic_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_generic_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
-        handle_exception_t handle_exception,
-        must_restart_t must_restart = &false_function,
+        HandleEvent handle_event,
+        HandleException handle_exception,
+        MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<generic_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+        return sepia::make_unique<generic_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
             filename,
-            std::forward<handle_event_t>(handle_event),
-            std::forward<handle_exception_t>(handle_exception),
-            std::forward<must_restart_t>(must_restart),
+            std::forward<HandleEvent>(handle_event),
+            std::forward<HandleException>(handle_exception),
+            std::forward<MustRestart>(must_restart),
             dispatch,
             chunk_size);
     }
 
     /// join_generic_event_stream_observable creates an event stream observable from functors and blocks until the end
     /// of the input file is reached.
-    template <typename handle_event_t>
-    void join(const std::string& filename, handle_event_t handle_event, std::size_t chunk_size = 1 << 10) {
+    template <typename HandleEvent>
+    void join(const std::string& filename, HandleEvent handle_event, std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto generic_event_stream_observable = make_generic_event_stream_observable(
             filename,
-            std::forward<handle_event_t>(handle_event),
+            std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
@@ -757,7 +757,7 @@ namespace sepia {
         virtual ~dvs_event_stream_writer() {}
 
         /// operator() handles an event.
-        virtual void operator()(dvs_event_t dvs_event) {
+        virtual void operator()(dvs_event dvs_event) {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
@@ -828,7 +828,7 @@ namespace sepia {
     /// handle_dvs_byte implements the event stream state machine for DVS events.
     class handle_dvs_byte {
         public:
-        handle_dvs_byte() : _state(state::idle), _dvs_event(dvs_event_t{0, 0, 0, false}) {}
+        handle_dvs_byte() : _state(state::idle), _dvs_event(dvs_event{0, 0, 0, false}) {}
         handle_dvs_byte(const handle_dvs_byte&) = default;
         handle_dvs_byte(handle_dvs_byte&&) = default;
         handle_dvs_byte& operator=(const handle_dvs_byte&) = default;
@@ -836,7 +836,7 @@ namespace sepia {
         virtual ~handle_dvs_byte() {}
 
         /// operator() handles a byte.
-        virtual bool operator()(uint8_t byte, dvs_event_t& dvs_event) {
+        virtual bool operator()(uint8_t byte, dvs_event& dvs_event) {
             switch (_state) {
                 case state::idle: {
                     if ((byte & 0b1111) == 0b1111) {
@@ -870,7 +870,7 @@ namespace sepia {
         }
 
         protected:
-        /// state_t represents the current state machine's state.
+        /// state represents the current state machine's state.
         enum class state {
             idle,
             byte0,
@@ -878,18 +878,18 @@ namespace sepia {
         };
 
         state _state;
-        dvs_event_t _dvs_event;
+        dvs_event _dvs_event;
     };
 
     /// dvs_event_stream_observable is a template-specialised event_stream_observable for DVS events.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    template <typename HandleEvent, typename HandleException, typename MustRestart>
     class dvs_event_stream_observable : public event_stream_observable {
         public:
         dvs_event_stream_observable(
             const std::string& filename,
-            handle_event_t handle_event,
-            handle_exception_t handle_exception,
-            must_restart_t must_restart,
+            HandleEvent handle_event,
+            HandleException handle_exception,
+            MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
             _event_stream(filename, std::ifstream::binary),
@@ -899,15 +899,15 @@ namespace sepia {
             }
             read_header(filename, _event_stream, 1);
             _loop = std::thread(
-                read_and_dispatch<dvs_event_t, handle_dvs_byte, must_restart_t, handle_event_t, handle_exception_t>,
+                read_and_dispatch<dvs_event, handle_dvs_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
                 handle_dvs_byte(),
-                std::forward<must_restart_t>(must_restart),
-                std::forward<handle_event_t>(handle_event),
-                std::forward<handle_exception_t>(handle_exception));
+                std::forward<MustRestart>(must_restart),
+                std::forward<HandleEvent>(handle_event),
+                std::forward<HandleException>(handle_exception));
         }
         dvs_event_stream_observable(const dvs_event_stream_observable&) = delete;
         dvs_event_stream_observable(dvs_event_stream_observable&&) = default;
@@ -925,35 +925,35 @@ namespace sepia {
     };
 
     /// make_dvs_event_stream_observable creates an event stream observable from functors.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
-    std::unique_ptr<dvs_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
+    std::unique_ptr<dvs_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_dvs_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
-        handle_exception_t handle_exception,
-        must_restart_t must_restart = &false_function,
+        HandleEvent handle_event,
+        HandleException handle_exception,
+        MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<dvs_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+        return sepia::make_unique<dvs_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
             filename,
-            std::forward<handle_event_t>(handle_event),
-            std::forward<handle_exception_t>(handle_exception),
-            std::forward<must_restart_t>(must_restart),
+            std::forward<HandleEvent>(handle_event),
+            std::forward<HandleException>(handle_exception),
+            std::forward<MustRestart>(must_restart),
             dispatch,
             chunk_size);
     }
 
     /// join_dvs_event_stream_observable creates an event stream observable from functors and blocks until the end of
     /// the input file is reached.
-    template <typename handle_event_t>
+    template <typename HandleEvent>
     void join_dvs_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
+        HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto dvs_event_stream_observable = make_dvs_event_stream_observable(
             filename,
-            std::forward<handle_event_t>(handle_event),
+            std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
@@ -975,7 +975,7 @@ namespace sepia {
         virtual ~atis_event_stream_writer() {}
 
         /// operator() handles an event.
-        virtual void operator()(atis_event_t atis_event) {
+        virtual void operator()(atis_event atis_event) {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
@@ -1047,7 +1047,7 @@ namespace sepia {
     /// handle_atis_byte implements the event stream state machine for ATIS events.
     class handle_atis_byte {
         public:
-        handle_atis_byte() : _state(state::idle), _atis_event(atis_event_t{0, 0, 0, false, false}) {}
+        handle_atis_byte() : _state(state::idle), _atis_event(atis_event{0, 0, 0, false, false}) {}
         handle_atis_byte(const handle_atis_byte&) = default;
         handle_atis_byte(handle_atis_byte&&) = default;
         handle_atis_byte& operator=(const handle_atis_byte&) = default;
@@ -1055,7 +1055,7 @@ namespace sepia {
         virtual ~handle_atis_byte() {}
 
         /// operator() handles a byte.
-        virtual bool operator()(uint8_t byte, atis_event_t& atis_event) {
+        virtual bool operator()(uint8_t byte, atis_event& atis_event) {
             switch (_state) {
                 case state::idle: {
                     if ((byte & 0b11111) == 0b11111) {
@@ -1099,18 +1099,18 @@ namespace sepia {
         };
 
         state _state;
-        atis_event_t _atis_event;
+        atis_event _atis_event;
     };
 
     /// atis_event_stream_observable is a template-specialised event_stream_observable for ATIS events.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    template <typename HandleEvent, typename HandleException, typename MustRestart>
     class atis_event_stream_observable : public event_stream_observable {
         public:
         atis_event_stream_observable(
             const std::string& filename,
-            handle_event_t handle_event,
-            handle_exception_t handle_exception,
-            must_restart_t must_restart,
+            HandleEvent handle_event,
+            HandleException handle_exception,
+            MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
             _event_stream(filename, std::ifstream::binary),
@@ -1120,15 +1120,15 @@ namespace sepia {
             }
             read_header(filename, _event_stream, 2);
             _loop = std::thread(
-                read_and_dispatch<atis_event_t, handle_atis_byte, must_restart_t, handle_event_t, handle_exception_t>,
+                read_and_dispatch<atis_event, handle_atis_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
                 handle_atis_byte(),
-                std::forward<must_restart_t>(must_restart),
-                std::forward<handle_event_t>(handle_event),
-                std::forward<handle_exception_t>(handle_exception));
+                std::forward<MustRestart>(must_restart),
+                std::forward<HandleEvent>(handle_event),
+                std::forward<HandleException>(handle_exception));
         }
         atis_event_stream_observable(const atis_event_stream_observable&) = delete;
         atis_event_stream_observable(atis_event_stream_observable&&) = default;
@@ -1146,35 +1146,35 @@ namespace sepia {
     };
 
     /// make_atis_event_stream_observable creates an event stream observable from functors.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
-    std::unique_ptr<atis_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
+    std::unique_ptr<atis_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_atis_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
-        handle_exception_t handle_exception,
-        must_restart_t must_restart = &false_function,
+        HandleEvent handle_event,
+        HandleException handle_exception,
+        MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<atis_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+        return sepia::make_unique<atis_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
             filename,
-            std::forward<handle_event_t>(handle_event),
-            std::forward<handle_exception_t>(handle_exception),
-            std::forward<must_restart_t>(must_restart),
+            std::forward<HandleEvent>(handle_event),
+            std::forward<HandleException>(handle_exception),
+            std::forward<MustRestart>(must_restart),
             dispatch,
             chunk_size);
     }
 
     /// join_atis_event_stream_observable creates an event stream observable from functors and blocks until the end of
     /// the input file is reached.
-    template <typename handle_event_t>
+    template <typename HandleEvent>
     void join_atis_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
+        HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto atis_event_stream_observable = make_atis_event_stream_observable(
             filename,
-            std::forward<handle_event_t>(handle_event),
+            std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
@@ -1196,7 +1196,7 @@ namespace sepia {
         virtual ~color_event_stream_writer() {}
 
         /// operator() handles an event.
-        virtual void operator()(color_event_t color_event) {
+        virtual void operator()(color_event color_event) {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
@@ -1261,7 +1261,7 @@ namespace sepia {
     /// handle_color_byte implements the event stream state machine for color events.
     class handle_color_byte {
         public:
-        handle_color_byte() : _state(state::idle), _color_event(color_event_t{0, 0, 0, 0, 0, 0}) {}
+        handle_color_byte() : _state(state::idle), _color_event(color_event{0, 0, 0, 0, 0, 0}) {}
         handle_color_byte(const handle_color_byte&) = default;
         handle_color_byte(handle_color_byte&&) = default;
         handle_color_byte& operator=(const handle_color_byte&) = default;
@@ -1269,7 +1269,7 @@ namespace sepia {
         virtual ~handle_color_byte() {}
 
         /// operator() handles a byte.
-        virtual bool operator()(uint8_t byte, color_event_t& color_event) {
+        virtual bool operator()(uint8_t byte, color_event& color_event) {
             switch (_state) {
                 case state::idle: {
                     if ((byte & 0b1111111) == 0b1111111) {
@@ -1328,18 +1328,18 @@ namespace sepia {
         };
 
         state _state;
-        color_event_t _color_event;
+        color_event _color_event;
     };
 
     /// color_event_stream_observable is a template-specialised event_stream_observable for color events.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t>
+    template <typename HandleEvent, typename HandleException, typename MustRestart>
     class color_event_stream_observable : public event_stream_observable {
         public:
         color_event_stream_observable(
             const std::string& filename,
-            handle_event_t handle_event,
-            handle_exception_t handle_exception,
-            must_restart_t must_restart,
+            HandleEvent handle_event,
+            HandleException handle_exception,
+            MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
             _event_stream(filename, std::ifstream::binary),
@@ -1349,15 +1349,15 @@ namespace sepia {
             }
             read_header(filename, _event_stream, 4);
             _loop = std::thread(
-                read_and_dispatch<color_event_t, handle_color_byte, must_restart_t, handle_event_t, handle_exception_t>,
+                read_and_dispatch<color_event, handle_color_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
                 handle_color_byte(),
-                std::forward<must_restart_t>(must_restart),
-                std::forward<handle_event_t>(handle_event),
-                std::forward<handle_exception_t>(handle_exception));
+                std::forward<MustRestart>(must_restart),
+                std::forward<HandleEvent>(handle_event),
+                std::forward<HandleException>(handle_exception));
         }
         color_event_stream_observable(const color_event_stream_observable&) = delete;
         color_event_stream_observable(color_event_stream_observable&&) = default;
@@ -1375,35 +1375,35 @@ namespace sepia {
     };
 
     /// make_color_event_stream_observable creates an event stream observable from functors.
-    template <typename handle_event_t, typename handle_exception_t, typename must_restart_t = decltype(&false_function)>
-    std::unique_ptr<color_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>
+    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
+    std::unique_ptr<color_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_color_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
-        handle_exception_t handle_exception,
-        must_restart_t must_restart = &false_function,
+        HandleEvent handle_event,
+        HandleException handle_exception,
+        MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<color_event_stream_observable<handle_event_t, handle_exception_t, must_restart_t>>(
+        return sepia::make_unique<color_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
             filename,
-            std::forward<handle_event_t>(handle_event),
-            std::forward<handle_exception_t>(handle_exception),
-            std::forward<must_restart_t>(must_restart),
+            std::forward<HandleEvent>(handle_event),
+            std::forward<HandleException>(handle_exception),
+            std::forward<MustRestart>(must_restart),
             dispatch,
             chunk_size);
     }
 
     /// join_color_event_stream_observable creates an event stream observable from functors and blocks until the end of
     /// the input file is reached.
-    template <typename handle_event_t>
+    template <typename HandleEvent>
     void join_color_event_stream_observable(
         const std::string& filename,
-        handle_event_t handle_event,
+        HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto color_event_stream_observable = make_color_event_stream_observable(
             filename,
-            std::forward<handle_event_t>(handle_event),
+            std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
             event_stream_observable::dispatch::as_fast_as_possible,
@@ -1412,24 +1412,24 @@ namespace sepia {
         capture_observable_exception.rethrow_unless<end_of_file>();
     }
 
-    /// Forward-declare base_parameter for referencing in unvalidated_parameter.
-    class base_parameter;
+    /// Forward-declare parameter for referencing in unvalidated_parameter.
+    class parameter;
 
     /// Forward-declare object_parameter and list_parameter for referencing in parameter.
     class object_parameter;
     class list_parameter;
 
-    /// base_parameter corresponds to a setting or a group of settings.
+    /// parameter corresponds to a setting or a group of settings.
     /// This class is used to validate the JSON parameters file, which is used to set the biases and other camera
     /// parameters.
-    class base_parameter {
+    class parameter {
         public:
-        base_parameter() = default;
-        base_parameter(const base_parameter&) = delete;
-        base_parameter(base_parameter&&) = default;
-        base_parameter& operator=(const base_parameter&) = delete;
-        base_parameter& operator=(base_parameter&&) = default;
-        virtual ~base_parameter(){};
+        parameter() = default;
+        parameter(const parameter&) = delete;
+        parameter(parameter&&) = default;
+        parameter& operator=(const parameter&) = delete;
+        parameter& operator=(parameter&&) = default;
+        virtual ~parameter(){};
 
         /// get_list_parameter is used to retrieve a list parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
@@ -1497,7 +1497,7 @@ namespace sepia {
         }
 
         /// clone generates a copy of the parameter.
-        virtual std::unique_ptr<base_parameter> clone() const = 0;
+        virtual std::unique_ptr<parameter> clone() const = 0;
 
         /// load is called by a parent parameter when loading JSON data.
         virtual std::string::const_iterator
@@ -1505,7 +1505,7 @@ namespace sepia {
 
         /// load sets the parameter value from an other parameter.
         /// The other parameter must a subset of this parameter, and is validated in the process.
-        virtual void load(const base_parameter& parameter) = 0;
+        virtual void load(const parameter& parameter) = 0;
 
         protected:
         /// trim removes white space and line break characters.
@@ -1530,16 +1530,16 @@ namespace sepia {
     };
 
     /// object_parameter is a specialised parameter which contains other parameters.
-    class object_parameter : public base_parameter {
+    class object_parameter : public parameter {
         public:
-        object_parameter() : base_parameter() {}
-        template <typename string_t, typename parameter_unique_ptr_t, typename... Rest>
-        object_parameter(string_t&& key, parameter_unique_ptr_t&& parameter, Rest&&... rest) :
+        object_parameter() : parameter() {}
+        template <typename String, typename Parameter, typename... Rest>
+        object_parameter(String&& key, Parameter&& parameter, Rest&&... rest) :
             object_parameter(std::forward<Rest>(rest)...) {
             _parameter_by_key.insert(std::make_pair(
-                std::forward<string_t>(key), std::move(std::forward<parameter_unique_ptr_t>(parameter))));
+                std::forward<String>(key), std::move(std::forward<Parameter>(parameter))));
         }
-        object_parameter(std::unordered_map<std::string, std::unique_ptr<base_parameter>> parameter_by_key) :
+        object_parameter(std::unordered_map<std::string, std::unique_ptr<parameter>> parameter_by_key) :
             object_parameter() {
             _parameter_by_key = std::move(parameter_by_key);
         }
@@ -1580,8 +1580,8 @@ namespace sepia {
             }
             return _parameter_by_key.at(*key)->get_string(key + 1, end);
         }
-        virtual std::unique_ptr<base_parameter> clone() const override {
-            std::unordered_map<std::string, std::unique_ptr<base_parameter>> new_parameter_by_key;
+        virtual std::unique_ptr<parameter> clone() const override {
+            std::unordered_map<std::string, std::unique_ptr<parameter>> new_parameter_by_key;
             for (const auto& key_and_parameter : _parameter_by_key) {
                 new_parameter_by_key.insert(std::make_pair(key_and_parameter.first, key_and_parameter.second->clone()));
             }
@@ -1657,7 +1657,7 @@ namespace sepia {
             ++end;
             return trim(end, file_end, line);
         }
-        virtual void load(const base_parameter& parameter) override {
+        virtual void load(const parameter& parameter) override {
             try {
                 const auto& casted_object_parameter = dynamic_cast<const object_parameter&>(parameter);
                 for (const auto& key_and_parameter : casted_object_parameter) {
@@ -1672,12 +1672,12 @@ namespace sepia {
         }
 
         /// begin returns an iterator to the beginning of the contained parameters map.
-        virtual std::unordered_map<std::string, std::unique_ptr<base_parameter>>::const_iterator begin() const {
+        virtual std::unordered_map<std::string, std::unique_ptr<parameter>>::const_iterator begin() const {
             return _parameter_by_key.begin();
         }
 
         /// end returns an iterator to the end of the contained parameters map.
-        virtual std::unordered_map<std::string, std::unique_ptr<base_parameter>>::const_iterator end() const {
+        virtual std::unordered_map<std::string, std::unique_ptr<parameter>>::const_iterator end() const {
             return _parameter_by_key.end();
         }
 
@@ -1693,31 +1693,31 @@ namespace sepia {
             field_separator,
         };
 
-        std::unordered_map<std::string, std::unique_ptr<base_parameter>> _parameter_by_key;
+        std::unordered_map<std::string, std::unique_ptr<parameter>> _parameter_by_key;
     };
 
     /// list_parameter is a specialised parameter which contains other parameters.
-    class list_parameter : public base_parameter {
+    class list_parameter : public parameter {
         public:
         /// make_empty generates an empty list parameter with the given value as template.
-        static std::unique_ptr<list_parameter> make_empty(std::unique_ptr<base_parameter> template_parameter) {
+        static std::unique_ptr<list_parameter> make_empty(std::unique_ptr<parameter> template_parameter) {
             return sepia::make_unique<list_parameter>(
-                std::vector<std::unique_ptr<base_parameter>>(), std::move(template_parameter));
+                std::vector<std::unique_ptr<parameter>>(), std::move(template_parameter));
         }
 
-        template <typename parameter_unique_ptr_t>
-        list_parameter(parameter_unique_ptr_t&& parameter) : base_parameter(), _template_parameter(parameter->clone()) {
-            _parameters.push_back(std::move(parameter));
+        template <typename Parameter>
+        list_parameter(Parameter&& template_parameter) : parameter(), _template_parameter(template_parameter->clone()) {
+            _parameters.push_back(std::move(template_parameter));
         }
-        template <typename parameter_unique_ptr_t, typename... Rest>
-        list_parameter(parameter_unique_ptr_t&& parameter, Rest&&... rest) :
+        template <typename Parameter, typename... Rest>
+        list_parameter(Parameter&& parameter, Rest&&... rest) :
             list_parameter(std::forward<Rest>(rest)...) {
-            _parameters.insert(_parameters.begin(), std::move(std::forward<parameter_unique_ptr_t>(parameter)));
+            _parameters.insert(_parameters.begin(), std::move(std::forward<Parameter>(parameter)));
         }
         list_parameter(
-            std::vector<std::unique_ptr<base_parameter>> parameters,
-            std::unique_ptr<base_parameter> template_parameter) :
-            base_parameter(),
+            std::vector<std::unique_ptr<parameter>> parameters,
+            std::unique_ptr<parameter> template_parameter) :
+            parameter(),
             _parameters(std::move(parameters)),
             _template_parameter(std::move(template_parameter)) {}
         list_parameter(const list_parameter&) = delete;
@@ -1733,8 +1733,8 @@ namespace sepia {
             }
             return *this;
         }
-        virtual std::unique_ptr<base_parameter> clone() const override {
-            std::vector<std::unique_ptr<base_parameter>> new_parameters;
+        virtual std::unique_ptr<parameter> clone() const override {
+            std::vector<std::unique_ptr<parameter>> new_parameters;
             for (const auto& parameter : _parameters) {
                 new_parameters.push_back(parameter->clone());
             }
@@ -1777,7 +1777,7 @@ namespace sepia {
             ++end;
             return trim(end, file_end, line);
         }
-        virtual void load(const base_parameter& parameter) override {
+        virtual void load(const parameter& parameter) override {
             try {
                 const list_parameter& casted_list_parameter = dynamic_cast<const list_parameter&>(parameter);
                 _parameters.clear();
@@ -1797,12 +1797,12 @@ namespace sepia {
         }
 
         /// begin returns an iterator to the beginning of the contained parameters vector.
-        virtual std::vector<std::unique_ptr<base_parameter>>::const_iterator begin() const {
+        virtual std::vector<std::unique_ptr<parameter>>::const_iterator begin() const {
             return _parameters.begin();
         }
 
         /// end returns an iterator to the end of the contained parameters vector.
-        virtual std::vector<std::unique_ptr<base_parameter>>::const_iterator end() const {
+        virtual std::vector<std::unique_ptr<parameter>>::const_iterator end() const {
             return _parameters.end();
         }
 
@@ -1814,14 +1814,14 @@ namespace sepia {
             field_separator,
         };
 
-        std::vector<std::unique_ptr<base_parameter>> _parameters;
-        std::unique_ptr<base_parameter> _template_parameter;
+        std::vector<std::unique_ptr<parameter>> _parameters;
+        std::unique_ptr<parameter> _template_parameter;
     };
 
     /// boolean_parameter is a specialised parameter for boolean values.
-    class boolean_parameter : public base_parameter {
+    class boolean_parameter : public parameter {
         public:
-        boolean_parameter(bool value) : base_parameter(), _value(value) {}
+        boolean_parameter(bool value) : parameter(), _value(value) {}
         boolean_parameter(const boolean_parameter&) = delete;
         boolean_parameter(boolean_parameter&&) = default;
         boolean_parameter& operator=(const boolean_parameter&) = delete;
@@ -1835,7 +1835,7 @@ namespace sepia {
             }
             return _value;
         }
-        virtual std::unique_ptr<base_parameter> clone() const override {
+        virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<boolean_parameter>(_value);
         }
         virtual std::string::const_iterator
@@ -1857,7 +1857,7 @@ namespace sepia {
             }
             return trim(end, file_end, line);
         }
-        virtual void load(const base_parameter& parameter) override {
+        virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_boolean({});
             } catch (const parameter_error& exception) {
@@ -1870,10 +1870,10 @@ namespace sepia {
     };
 
     /// number_parameter is a specialised parameter for numeric values.
-    class number_parameter : public base_parameter {
+    class number_parameter : public parameter {
         public:
         number_parameter(double value, double minimum, double maximum, bool is_integer) :
-            base_parameter(),
+            parameter(),
             _value(value),
             _minimum(minimum),
             _maximum(maximum),
@@ -1893,7 +1893,7 @@ namespace sepia {
             }
             return _value;
         }
-        virtual std::unique_ptr<base_parameter> clone() const override {
+        virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<number_parameter>(_value, _minimum, _maximum, _is_integer);
         }
         virtual std::string::const_iterator
@@ -1917,7 +1917,7 @@ namespace sepia {
             }
             return trim(end, file_end, line);
         }
-        virtual void load(const base_parameter& parameter) override {
+        virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_number({});
             } catch (const parameter_error& exception) {
@@ -1959,15 +1959,15 @@ namespace sepia {
         char_parameter& operator=(const char_parameter&) = delete;
         char_parameter& operator=(char_parameter&&) = default;
         virtual ~char_parameter() {}
-        virtual std::unique_ptr<base_parameter> clone() const override {
+        virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<char_parameter>(_value);
         }
     };
 
     /// string_parameter is a specialised parameter for string values.
-    class string_parameter : public base_parameter {
+    class string_parameter : public parameter {
         public:
-        string_parameter(const std::string& value) : base_parameter(), _value(value) {}
+        string_parameter(const std::string& value) : parameter(), _value(value) {}
         string_parameter(const string_parameter&) = delete;
         string_parameter(string_parameter&&) = default;
         string_parameter& operator=(const string_parameter&) = delete;
@@ -1981,7 +1981,7 @@ namespace sepia {
             }
             return _value;
         }
-        virtual std::unique_ptr<base_parameter> clone() const override {
+        virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<string_parameter>(_value);
         }
         virtual std::string::const_iterator
@@ -2005,7 +2005,7 @@ namespace sepia {
             ++end;
             return trim(end, file_end, line);
         }
-        virtual void load(const base_parameter& parameter) override {
+        virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_string({});
             } catch (const parameter_error& exception) {
@@ -2033,7 +2033,7 @@ namespace sepia {
         enum_parameter& operator=(const enum_parameter&) = delete;
         enum_parameter& operator=(enum_parameter&&) = default;
         virtual ~enum_parameter() {}
-        virtual std::unique_ptr<base_parameter> clone() const override {
+        virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<enum_parameter>(_value, _available_values);
         }
         virtual std::string::const_iterator
@@ -2062,7 +2062,7 @@ namespace sepia {
             ++end;
             return trim(end, file_end, line);
         }
-        virtual void load(const base_parameter& parameter) override {
+        virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_string({});
             } catch (const parameter_error& exception) {
@@ -2107,7 +2107,7 @@ namespace sepia {
                 _json_data.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
             }
         }
-        unvalidated_parameter(std::unique_ptr<base_parameter> parameter) :
+        unvalidated_parameter(std::unique_ptr<parameter> parameter) :
             _is_string(false),
             _parameter(std::move(parameter)) {}
         unvalidated_parameter(const unvalidated_parameter&) = delete;
@@ -2121,18 +2121,18 @@ namespace sepia {
             return _is_string;
         }
 
-        /// json_data returns the json data inside the given filename.
+        /// to_json_data returns the json data inside the given filename.
         /// An error is thrown if the object was constructed with a parameter.
-        virtual const std::string& json_data() const {
+        virtual const std::string& to_json_data() const {
             if (!_is_string) {
                 throw parameter_error("The unvalidated parameter is not a string");
             }
             return _json_data;
         }
 
-        /// parameter returns the provided parameter.
+        /// to_parameter returns the provided parameter.
         /// An error is thrown if the object was consrtructed with a string.
-        virtual const base_parameter& parameter() const {
+        virtual const parameter& to_parameter() const {
             if (_is_string) {
                 throw parameter_error("The unvalidated parameter is not a parameter");
             }
@@ -2142,20 +2142,20 @@ namespace sepia {
         protected:
         bool _is_string;
         std::string _json_data;
-        std::unique_ptr<base_parameter> _parameter;
+        std::unique_ptr<parameter> _parameter;
     };
 
     /// specialised_camera represents a template-specialised generic event-based camera.
-    template <typename event_t, typename handle_event_t, typename handle_exception_t>
+    template <typename Event, typename HandleEvent, typename HandleException>
     class specialised_camera {
         public:
         specialised_camera(
-            handle_event_t handle_event,
-            handle_exception_t handle_exception,
+            HandleEvent handle_event,
+            HandleException handle_exception,
             const std::size_t& fifo_size,
             const std::chrono::milliseconds& sleep_duration) :
-            _handle_event(std::forward<handle_event_t>(handle_event)),
-            _handle_exception(std::forward<handle_exception_t>(handle_exception)),
+            _handle_event(std::forward<HandleEvent>(handle_event)),
+            _handle_exception(std::forward<HandleException>(handle_exception)),
             _buffer_running(true),
             _sleep_duration(sleep_duration),
             _head(0),
@@ -2163,7 +2163,7 @@ namespace sepia {
             _events.resize(fifo_size);
             _buffer_loop = std::thread([this]() -> void {
                 try {
-                    event_t event;
+                    Event event;
                     while (_buffer_running.load(std::memory_order_relaxed)) {
                         const auto current_head = _head.load(std::memory_order_relaxed);
                         if (current_head == _tail.load(std::memory_order_acquire)) {
@@ -2190,7 +2190,7 @@ namespace sepia {
 
         /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
         /// If the event could not be inserted (FIFO full), false is returned.
-        virtual bool push(event_t event) {
+        virtual bool push(Event event) {
             const auto current_tail = _tail.load(std::memory_order_relaxed);
             const auto next_tail = (current_tail + 1) % _events.size();
             if (next_tail != _head.load(std::memory_order_acquire)) {
@@ -2202,13 +2202,13 @@ namespace sepia {
         }
 
         protected:
-        handle_event_t _handle_event;
-        handle_exception_t _handle_exception;
+        HandleEvent _handle_event;
+        HandleException _handle_exception;
         std::thread _buffer_loop;
         std::atomic_bool _buffer_running;
         const std::chrono::milliseconds _sleep_duration;
         std::atomic<std::size_t> _head;
         std::atomic<std::size_t> _tail;
-        std::vector<event_t> _events;
+        std::vector<Event> _events;
     };
 }
