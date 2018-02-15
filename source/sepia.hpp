@@ -286,8 +286,8 @@ namespace sepia {
     class split {
         public:
         split(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) :
-            _handle_dvs_event(std::forward<handle_dvs_event>(handle_dvs_event)),
-            _handle_threshold_crossing(std::forward<handle_threshold_crossing>(handle_threshold_crossing)) {}
+            _handle_dvs_event(std::forward<HandleDvsEvent>(handle_dvs_event)),
+            _handle_threshold_crossing(std::forward<HandleThresholdCrossing>(handle_threshold_crossing)) {}
         split(const split&) = delete;
         split(split&&) = default;
         split& operator=(const split&) = delete;
