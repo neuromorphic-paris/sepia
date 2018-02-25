@@ -2205,7 +2205,7 @@ namespace sepia {
         specialised_camera(
             HandleEvent handle_event,
             HandleException handle_exception,
-            const std::size_t& fifo_size,
+            std::size_t fifo_size,
             const std::chrono::milliseconds& sleep_duration) :
             _handle_event(std::forward<HandleEvent>(handle_event)),
             _handle_exception(std::forward<HandleException>(handle_exception)),
