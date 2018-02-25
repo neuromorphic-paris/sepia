@@ -2212,8 +2212,8 @@ namespace sepia {
             _buffer_running(true),
             _sleep_duration(sleep_duration),
             _head(0),
-            _tail(0) {
-            _events.resize(fifo_size);
+            _tail(0),
+            _events(fifo_size) {
             _buffer_loop = std::thread([this]() -> void {
                 try {
                     Event event;
