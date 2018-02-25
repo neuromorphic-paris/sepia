@@ -385,7 +385,7 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(15);
+                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
                                     offset_skipped = false;
                                     handle_byte.reset();
                                     time_reference = std::chrono::system_clock::now();
@@ -432,7 +432,7 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(15);
+                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
                                     handle_byte.reset();
                                     time_reference = std::chrono::system_clock::now();
                                     continue;
@@ -464,7 +464,7 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(15);
+                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
                                     handle_byte.reset();
                                     continue;
                                 }
