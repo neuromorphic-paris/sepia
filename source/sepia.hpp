@@ -385,7 +385,7 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(15);
+                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
                                     offset_skipped = false;
                                     handle_byte.reset();
                                     time_reference = std::chrono::system_clock::now();
@@ -432,7 +432,7 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(15);
+                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
                                     handle_byte.reset();
                                     time_reference = std::chrono::system_clock::now();
                                     continue;
@@ -464,7 +464,7 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(15);
+                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
                                     handle_byte.reset();
                                     continue;
                                 }
@@ -2205,15 +2205,15 @@ namespace sepia {
         specialised_camera(
             HandleEvent handle_event,
             HandleException handle_exception,
-            const std::size_t& fifo_size,
+            std::size_t fifo_size,
             const std::chrono::milliseconds& sleep_duration) :
             _handle_event(std::forward<HandleEvent>(handle_event)),
             _handle_exception(std::forward<HandleException>(handle_exception)),
             _buffer_running(true),
             _sleep_duration(sleep_duration),
             _head(0),
-            _tail(0) {
-            _events.resize(fifo_size);
+            _tail(0),
+            _events(fifo_size) {
             _buffer_loop = std::thread([this]() -> void {
                 try {
                     Event event;
