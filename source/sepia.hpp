@@ -54,15 +54,15 @@ namespace sepia {
         /// t represents the event's timestamp.
         uint64_t t;
 
-        /// data represents untagged data associated with the event.
-        uint64_t data;
-
-        /// extra_bit is an extra data bit associated with the event.
-        bool extra_bit;
-    } __attribute__((packed));
+        /// bytes stores the data payload associated with the event.
+        std::vector<uint8_t> bytes;
+    };
 
     /// dvs_event represents the parameters of a change detection.
     struct dvs_event {
+        /// t represents the event's timestamp.
+        uint64_t t;
+
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -71,15 +71,15 @@ namespace sepia {
         /// y is 0 on the bottom, and increases from bottom to top.
         uint16_t y;
 
-        /// t represents the event's timestamp.
-        uint64_t t;
-
         /// is_increase is false if the light is decreasing.
         bool is_increase;
     } __attribute__((packed));
 
     /// atis_event represents the parameters of a change detection or an exposure measurement.
     struct atis_event {
+        /// t represents the event's timestamp.
+        uint64_t t;
+
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -87,9 +87,6 @@ namespace sepia {
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases bottom to top.
         uint16_t y;
-
-        /// t represents the event's timestamp.
-        uint64_t t;
 
         /// is_threshold_crossing is false if the event is a change detection, and true if it is a threshold crossing.
         bool is_threshold_crossing;
@@ -101,6 +98,9 @@ namespace sepia {
 
     /// threshold_crossing represent the parameters of a threshold crossing.
     struct threshold_crossing {
+        /// t represents the event's timestamp.
+        uint64_t t;
+
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -109,15 +109,15 @@ namespace sepia {
         /// y is 0 on the bottom, and increases from bottom to top.
         uint16_t y;
 
-        /// t represents the event's timestamp.
-        uint64_t t;
-
         /// is_second is false if the event is a first threshold crossing.
         bool is_second;
     } __attribute__((packed));
 
     /// color_event represents the parameters of a color event.
     struct color_event {
+        /// t represents the event's timestamp.
+        uint64_t t;
+
         /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
         /// x is 0 on the left, and increases from left to right.
         uint16_t x;
@@ -125,9 +125,6 @@ namespace sepia {
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases bottom to top.
         uint16_t y;
-
-        /// t represents the event's timestamp.
-        uint64_t t;
 
         /// r represents the red component of the color.
         uint8_t r;
@@ -165,6 +162,13 @@ namespace sepia {
         public:
         unsupported_version(const std::string& filename) :
             std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
+    };
+
+    /// incomplete_header is thrown when the end of file is reached while reading the header.
+    class incomplete_header : public std::runtime_error {
+        public:
+        incomplete_header(const std::string& filename) :
+            std::runtime_error("The Event Stream file '" + filename + "' has an incomplete header") {}
     };
 
     /// unsupported_event_type is thrown when an Event Stream file uses an unsupported event type.
@@ -206,8 +210,16 @@ namespace sepia {
         parameter_error(const std::string& what) : std::logic_error(what) {}
     };
 
-    /// read_type opens the given Event Stream, checks its header and retrieves the stream type.
-    inline event_stream_type read_type(const std::string& filename) {
+    /// header bundles the parameters composing the stream's header.
+    struct header {
+        std::array<uint8_t, 3> event_stream_version;
+        event_stream_type event_stream_type;
+        uint16_t width;
+        uint16_t height;
+    };
+
+    /// read_header opens the given Event Stream, checks its header and retrieves meta-information.
+    inline header read_header(const std::string& filename) {
         std::ifstream event_stream(filename);
         if (!event_stream.good()) {
             throw unreadable_file(filename);
@@ -219,43 +231,69 @@ namespace sepia {
                 throw wrong_signature(filename);
             }
         }
+        header header = {};
         {
-            std::array<uint8_t, 3> read_event_stream_version;
             event_stream.read(
-                reinterpret_cast<char*>(read_event_stream_version.data()), read_event_stream_version.size());
-            if (event_stream.eof() || std::get<0>(read_event_stream_version) != std::get<0>(event_stream_version())
-                || std::get<1>(read_event_stream_version) < std::get<1>(event_stream_version())) {
+                reinterpret_cast<char*>(header.event_stream_version.data()), header.event_stream_version.size());
+            if (event_stream.eof()) {
+                throw incomplete_header(filename);
+            }
+            if (std::get<0>(header.event_stream_version) != std::get<0>(event_stream_version())
+                || std::get<1>(header.event_stream_version) < std::get<1>(event_stream_version())) {
                 throw unsupported_version(filename);
             }
         }
         {
             const char type_char = event_stream.get();
+            if (event_stream.eof()) {
+                throw incomplete_header(filename);
+            }
             const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
             if (type_byte == static_cast<uint8_t>(event_stream_type::generic)) {
-                return event_stream_type::generic;
+                header.event_stream_type = event_stream_type::generic;
             } else if (type_byte == static_cast<uint8_t>(event_stream_type::dvs)) {
-                return event_stream_type::dvs;
+                header.event_stream_type = event_stream_type::dvs;
             } else if (type_byte == static_cast<uint8_t>(event_stream_type::atis)) {
-                return event_stream_type::atis;
+                header.event_stream_type = event_stream_type::atis;
             } else if (type_byte == static_cast<uint8_t>(event_stream_type::color)) {
-                return event_stream_type::color;
+                header.event_stream_type = event_stream_type::color;
             } else {
                 throw unsupported_event_type(filename);
             }
         }
+        if (header.event_stream_type != event_stream_type::generic) {
+            std::array<uint8_t, 4> size_bytes;
+            event_stream.read(reinterpret_cast<char*>(size_bytes.data()), size_bytes.size());
+            if (event_stream.eof()) {
+                throw incomplete_header(filename);
+            }
+            header.width =
+                (static_cast<uint16_t>(std::get<0>(size_bytes))
+                 | (static_cast<uint16_t>(std::get<1>(size_bytes)) << 8));
+            header.height =
+                (static_cast<uint16_t>(std::get<2>(size_bytes))
+                 | (static_cast<uint16_t>(std::get<3>(size_bytes)) << 8));
+        }
+        return header;
     }
 
     /// write_header writes the header bytes to an byte stream.
-    inline void write_header(std::ostream& event_stream, event_stream_type event_stream_type) {
+    inline void write_header(std::ostream& event_stream, event_stream_type event_stream_type, uint16_t width, uint16_t height) {
         event_stream.write("Event Stream", 12);
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
         auto type_byte = static_cast<uint8_t>(event_stream_type);
         event_stream.put(*reinterpret_cast<char*>(&type_byte));
+        if (event_stream_type != event_stream_type::generic) {
+            event_stream.put(width & 0b11111111);
+            event_stream.put((width & 0b1111111100000000) >> 8);
+            event_stream.put(height & 0b11111111);
+            event_stream.put((height & 0b1111111100000000) >> 8);
+        }
     }
 
-    /// read_header consumes the header bytes from a byte stream.
+    /// consume_header consumes the header bytes from a byte stream.
     inline void
-    read_header(const std::string& filename, std::istream& event_stream, event_stream_type expected_event_stream_type) {
+    consume_header(const std::string& filename, std::istream& event_stream, event_stream_type expected_event_stream_type) {
         {
             auto read_signature = event_stream_signature();
             event_stream.read(&read_signature[0], read_signature.size());
@@ -267,21 +305,34 @@ namespace sepia {
             std::array<uint8_t, 3> read_event_stream_version;
             event_stream.read(
                 reinterpret_cast<char*>(read_event_stream_version.data()), read_event_stream_version.size());
-            if (event_stream.eof() || std::get<0>(read_event_stream_version) != std::get<0>(event_stream_version())
+            if (event_stream.eof()) {
+                throw incomplete_header(filename);
+            }
+            if (std::get<0>(read_event_stream_version) != std::get<0>(event_stream_version())
                 || std::get<1>(read_event_stream_version) < std::get<1>(event_stream_version())) {
                 throw unsupported_version(filename);
             }
         }
         {
             const char type_char = event_stream.get();
+            if (event_stream.eof()) {
+                throw incomplete_header(filename);
+            }
             const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
             if (type_byte != static_cast<uint8_t>(expected_event_stream_type)) {
                 throw unsupported_event_type(filename);
             }
         }
+        if (expected_event_stream_type != event_stream_type::generic) {
+            std::array<uint8_t, 4> size_bytes;
+            event_stream.read(reinterpret_cast<char*>(size_bytes.data()), size_bytes.size());
+            if (event_stream.eof()) {
+                throw incomplete_header(filename);
+            }
+        }
     }
 
-    /// split separates a stream of events into a stream of change detections and a stream of theshold crossings.
+    /// split separates a stream of ATIS events into a stream of DVS events and a stream of theshold crossings.
     template <typename HandleDvsEvent, typename HandleThresholdCrossing>
     class split {
         public:
@@ -298,9 +349,9 @@ namespace sepia {
         virtual void operator()(atis_event atis_event) {
             if (atis_event.is_threshold_crossing) {
                 _handle_threshold_crossing(
-                    threshold_crossing{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
+                    threshold_crossing{atis_event.t, atis_event.x, atis_event.y, atis_event.polarity});
             } else {
-                _handle_dvs_event(dvs_event{atis_event.x, atis_event.y, atis_event.t, atis_event.polarity});
+                _handle_dvs_event(dvs_event{atis_event.t, atis_event.x, atis_event.y, atis_event.polarity});
             }
         }
 
@@ -353,14 +404,14 @@ namespace sepia {
             HandleEvent handle_event,
             HandleException handle_exception) {
             try {
-                Event event;
+                Event event = {};
                 std::vector<uint8_t> bytes(chunk_size);
                 switch (dispatch) {
                     case event_stream_observable::dispatch::synchronously_but_skip_offset: {
                         auto offset_skipped = false;
                         auto time_reference = std::chrono::system_clock::now();
-                        uint64_t initial_timestamp = 0;
-                        uint64_t previous_timestamp = 0;
+                        uint64_t initial_t = 0;
+                        uint64_t previous_t = 0;
                         while (running.load(std::memory_order_relaxed)) {
                             event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                             if (event_stream.eof()) {
@@ -369,25 +420,26 @@ namespace sepia {
                                      ++byte_iterator) {
                                     if (handle_byte(*byte_iterator, event)) {
                                         if (offset_skipped) {
-                                            if (event.t > previous_timestamp) {
-                                                previous_timestamp = event.t;
+                                            if (event.t > previous_t) {
+                                                previous_t = event.t;
                                                 std::this_thread::sleep_until(
-                                                    time_reference
-                                                    + std::chrono::microseconds(event.t - initial_timestamp));
+                                                    time_reference + std::chrono::microseconds(event.t - initial_t));
                                             }
                                         } else {
                                             offset_skipped = true;
-                                            initial_timestamp = event.t;
-                                            previous_timestamp = event.t;
+                                            initial_t = event.t;
+                                            previous_t = event.t;
                                         }
                                         handle_event(event);
                                     }
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
+                                    event_stream.seekg(
+                                        event_stream_signature().size() + event_stream_version().size() + 1);
                                     offset_skipped = false;
                                     handle_byte.reset();
+                                    event = Event{};
                                     time_reference = std::chrono::system_clock::now();
                                     continue;
                                 }
@@ -396,16 +448,15 @@ namespace sepia {
                             for (auto byte : bytes) {
                                 if (handle_byte(byte, event)) {
                                     if (offset_skipped) {
-                                        if (event.t > previous_timestamp) {
-                                            previous_timestamp = event.t;
+                                        if (event.t > previous_t) {
+                                            previous_t = event.t;
                                             std::this_thread::sleep_until(
-                                                time_reference
-                                                + std::chrono::microseconds(event.t - initial_timestamp));
+                                                time_reference + std::chrono::microseconds(event.t - initial_t));
                                         }
                                     } else {
                                         offset_skipped = true;
-                                        initial_timestamp = event.t;
-                                        previous_timestamp = event.t;
+                                        initial_t = event.t;
+                                        previous_t = event.t;
                                     }
                                     handle_event(event);
                                 }
@@ -414,7 +465,7 @@ namespace sepia {
                     }
                     case event_stream_observable::dispatch::synchronously: {
                         auto time_reference = std::chrono::system_clock::now();
-                        uint64_t previous_timestamp = 0;
+                        uint64_t previous_t = 0;
                         while (running.load(std::memory_order_relaxed)) {
                             event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                             if (event_stream.eof()) {
@@ -422,18 +473,20 @@ namespace sepia {
                                      byte_iterator != std::next(bytes.begin(), event_stream.gcount());
                                      ++byte_iterator) {
                                     if (handle_byte(*byte_iterator, event)) {
-                                        if (event.t > previous_timestamp) {
+                                        if (event.t > previous_t) {
                                             std::this_thread::sleep_until(
                                                 time_reference + std::chrono::microseconds(event.t));
                                         }
-                                        previous_timestamp = event.t;
+                                        previous_t = event.t;
                                         handle_event(event);
                                     }
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
+                                    event_stream.seekg(
+                                        event_stream_signature().size() + event_stream_version().size() + 1);
                                     handle_byte.reset();
+                                    event = Event{};
                                     time_reference = std::chrono::system_clock::now();
                                     continue;
                                 }
@@ -441,11 +494,11 @@ namespace sepia {
                             }
                             for (auto byte : bytes) {
                                 if (handle_byte(byte, event)) {
-                                    if (event.t > previous_timestamp) {
+                                    if (event.t > previous_t) {
                                         std::this_thread::sleep_until(
                                             time_reference + std::chrono::microseconds(event.t));
                                     }
-                                    previous_timestamp = event.t;
+                                    previous_t = event.t;
                                     handle_event(event);
                                 }
                             }
@@ -464,8 +517,10 @@ namespace sepia {
                                 }
                                 if (must_restart()) {
                                     event_stream.clear();
-                                    event_stream.seekg(event_stream_signature().size() + event_stream_version().size() + 1);
+                                    event_stream.seekg(
+                                        event_stream_signature().size() + event_stream_version().size() + 1);
                                     handle_byte.reset();
+                                    event = Event{};
                                     continue;
                                 }
                                 throw end_of_file();
@@ -544,7 +599,7 @@ namespace sepia {
     /// generic_event_stream_writer writes events to a generic Event Stream file.
     class generic_event_stream_writer {
         public:
-        generic_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+        generic_event_stream_writer() : _logging(false), _previous_t(0) {
             _accessing_event_stream.clear(std::memory_order_release);
         }
         generic_event_stream_writer(const generic_event_stream_writer&) = delete;
@@ -558,26 +613,21 @@ namespace sepia {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
-                auto relative_timestamp = generic_event.t - _previous_timestamp;
-                if (relative_timestamp >= 127) {
-                    const auto number_of_overflows = relative_timestamp / 127;
+                auto relative_t = generic_event.t - _previous_t;
+                if (relative_t >= 0b11111110) {
+                    const auto number_of_overflows = relative_t / 0b11111110;
                     for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                        _event_stream.put(0b11111111);
                     }
-                    relative_timestamp -= number_of_overflows * 127;
+                    relative_t -= number_of_overflows * 0b11111110;
                 }
-                _event_stream.put(
-                    static_cast<uint8_t>(relative_timestamp)
-                    | static_cast<uint8_t>((generic_event.extra_bit ? 0b1 : 0b0) << 7));
-                _event_stream.put(static_cast<uint8_t>(generic_event.data & 0x00000000000000ff));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x000000000000ff00) >> 8));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x0000000000ff0000) >> 16));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x00000000ff000000) >> 24));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x0000000ff0000000) >> 32));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x0000ff0000000000) >> 40));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0x00ff000000000000) >> 48));
-                _event_stream.put(static_cast<uint8_t>((generic_event.data & 0xff00000000000000) >> 56));
-                _previous_timestamp = generic_event.t;
+                _event_stream.put(relative_t);
+                for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
+                    _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) == 0 ? 0 : 1));
+                }
+                _event_stream.write(
+                    reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
+                _previous_t = generic_event.t;
             }
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -594,7 +644,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, event_stream_type::generic);
+            write_header(_event_stream, event_stream_type::generic, 0, 0);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -609,7 +659,7 @@ namespace sepia {
             }
             _logging = false;
             _event_stream.close();
-            _previous_timestamp = 0;
+            _previous_t = 0;
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
@@ -617,13 +667,13 @@ namespace sepia {
         std::ofstream _event_stream;
         bool _logging;
         std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_timestamp;
+        uint64_t _previous_t;
     };
 
     /// handle_generic_byte implements the event stream state machine for generic events.
     class handle_generic_byte {
         public:
-        handle_generic_byte() : _state(state::idle), _generic_event(generic_event{0, 0, false}) {}
+        handle_generic_byte() : _state(state::idle), _index(0), _bytes_size(0) {}
         handle_generic_byte(const handle_generic_byte&) = default;
         handle_generic_byte(handle_generic_byte&&) = default;
         handle_generic_byte& operator=(const handle_generic_byte&) = default;
@@ -634,68 +684,44 @@ namespace sepia {
         virtual bool operator()(uint8_t byte, generic_event& generic_event) {
             switch (_state) {
                 case state::idle: {
-                    if ((byte & 0b1111111) == 0b1111111) {
-                        _generic_event.t += ((byte & 0b10000000) >> 7) * 127;
-                    } else {
-                        _generic_event.t = _generic_event.t + (byte & 0b1111111);
-                        _generic_event.extra_bit = ((byte & 0b10000000) >> 7) == 1;
+                    if (byte == 0b11111111) {
+                        generic_event.t += 0b11111110;
+                    } else if (byte != 0b11111110) {
+                        generic_event.t += byte;
                         _state = state::byte0;
                     }
-                    return false;
                 }
                 case state::byte0: {
-                    _generic_event.data = byte;
-                    _state = state::byte1;
-                    return false;
+                    _bytes_size |= (((byte & 0b1111111) >> 1) << (7 * _index));
+                    if ((byte & 1) == 0) {
+                        generic_event.bytes.clear();
+                        _index = 0;
+                        if (_bytes_size == 0) {
+                            _state = state::idle;
+                            return true;
+                        }
+                        generic_event.bytes.reserve(_bytes_size);
+                        _state = state::size_byte;
+                    }
                 }
-                case state::byte1: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 8;
-                    _state = state::byte2;
-                    return false;
-                }
-                case state::byte2: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 16;
-                    _state = state::byte3;
-                    return false;
-                }
-                case state::byte3: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
-                    _state = state::byte4;
-                    return false;
-                }
-                case state::byte4: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
-                    _state = state::byte5;
-                    return false;
-                }
-                case state::byte5: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
-                    _state = state::byte6;
-                    return false;
-                }
-                case state::byte6: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
-                    _state = state::byte7;
-                    return false;
-                }
-                case state::byte7: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 24;
-                    _state = state::byte8;
-                    return false;
-                }
-                case state::byte8: {
-                    _generic_event.data |= static_cast<uint64_t>(byte) << 56;
-                    _state = state::idle;
-                    generic_event = _generic_event;
-                    return true;
+                case state::size_byte: {
+                    generic_event.bytes.push_back(byte);
+                    if (generic_event.bytes.size() == _bytes_size) {
+                        _state = state::idle;
+                        _index = 0;
+                        _bytes_size = 0;
+                        return true;
+                    }
                 }
             }
+            return false;
         }
 
-        /// reset initialises the state machine.
+        /// reset initializes the state machine.
         virtual void reset() {
             _state = state::idle;
-            _generic_event.t = 0;
+            _index = 0;
+            _bytes_size = 0;
         }
 
         protected:
@@ -703,18 +729,12 @@ namespace sepia {
         enum class state {
             idle,
             byte0,
-            byte1,
-            byte2,
-            byte3,
-            byte4,
-            byte5,
-            byte6,
-            byte7,
-            byte8,
+            size_byte,
         };
 
         state _state;
-        generic_event _generic_event;
+        std::size_t _index;
+        std::size_t _bytes_size;
     };
 
     /// generic_event_stream_observable is a template-specialised event_stream_observable for generic events.
@@ -733,7 +753,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, event_stream_type::generic);
+            consume_header(filename, _event_stream, event_stream_type::generic);
             _loop = std::thread(
                 read_and_dispatch<generic_event, handle_generic_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -801,7 +821,7 @@ namespace sepia {
     /// dvs_event_stream_writer writes events to an Event Stream file.
     class dvs_event_stream_writer {
         public:
-        dvs_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+        dvs_event_stream_writer() : _logging(false), _previous_t(0) {
             _accessing_event_stream.clear(std::memory_order_release);
         }
         dvs_event_stream_writer(const dvs_event_stream_writer&) = delete;
@@ -815,34 +835,26 @@ namespace sepia {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
-                auto relative_timestamp = dvs_event.t - _previous_timestamp;
-                if (relative_timestamp >= 15) {
-                    const auto number_of_overflows = relative_timestamp / 15;
-                    for (std::size_t index = 0; index < number_of_overflows / 15; ++index) {
-                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                auto relative_t = dvs_event.t - _previous_t;
+                if (relative_t >= 0b1111111) {
+                    const auto number_of_overflows = relative_t / 0b1111111;
+                    for (std::size_t index = 0; index < number_of_overflows / 0b1111111; ++index) {
+                        _event_stream.put(0b11111111);
                     }
-                    const auto number_of_overflows_left = number_of_overflows % 15;
-                    if (number_of_overflows_left > 0) {
-                        _event_stream.put(
-                            static_cast<uint8_t>(0b1111) | static_cast<uint8_t>(number_of_overflows_left << 4));
-                    }
-                    relative_timestamp -= number_of_overflows * 15;
+                    relative_t -= number_of_overflows * 0b1111111;
                 }
-                _event_stream.put(
-                    static_cast<uint8_t>(relative_timestamp) | static_cast<uint8_t>((dvs_event.x & 0b1111) << 4));
-                _event_stream.put(
-                    static_cast<uint8_t>((dvs_event.x & 0b1111110000) >> 4)
-                    | static_cast<uint8_t>((dvs_event.y & 0b11) << 6));
-                _event_stream.put(
-                    static_cast<uint8_t>((dvs_event.y & 0b111111100) >> 2)
-                    | static_cast<uint8_t>(dvs_event.is_increase ? 0b10000000 : 0));
-                _previous_timestamp = dvs_event.t;
+                _event_stream.put((relative_t << 1) | (dvs_event.is_increase ? 1 : 0));
+                _event_stream.put(dvs_event.x & 0b11111111);
+                _event_stream.put((dvs_event.x & 0b1111111100000000) >> 8);
+                _event_stream.put(dvs_event.y & 0b11111111);
+                _event_stream.put((dvs_event.y & 0b1111111100000000) >> 8);
+                _previous_t = dvs_event.t;
             }
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
         /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename) {
+        virtual void open(const std::string& filename, uint16_t width, uint16_t height) {
             _event_stream.open(filename, std::ifstream::binary);
             if (!_event_stream.good()) {
                 throw unwritable_file(filename);
@@ -853,7 +865,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, event_stream_type::dvs);
+            write_header(_event_stream, event_stream_type::dvs, width, height);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -868,7 +880,7 @@ namespace sepia {
             }
             _logging = false;
             _event_stream.close();
-            _previous_timestamp = 0;
+            _previous_t = 0;
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
@@ -876,13 +888,13 @@ namespace sepia {
         std::ofstream _event_stream;
         bool _logging;
         std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_timestamp;
+        uint64_t _previous_t;
     };
 
     /// handle_dvs_byte implements the event stream state machine for DVS events.
     class handle_dvs_byte {
         public:
-        handle_dvs_byte() : _state(state::idle), _dvs_event(dvs_event{0, 0, 0, false}) {}
+        handle_dvs_byte() : _state(state::idle) {}
         handle_dvs_byte(const handle_dvs_byte&) = default;
         handle_dvs_byte(handle_dvs_byte&&) = default;
         handle_dvs_byte& operator=(const handle_dvs_byte&) = default;
@@ -893,32 +905,39 @@ namespace sepia {
         virtual bool operator()(uint8_t byte, dvs_event& dvs_event) {
             switch (_state) {
                 case state::idle: {
-                    if ((byte & 0b1111) == 0b1111) {
-                        _dvs_event.t += ((byte & 0b11110000) >> 4) * 15;
-                    } else {
-                        _dvs_event.t = _dvs_event.t + (byte & 0b1111);
-                        _dvs_event.x = ((byte & 0b11110000) >> 4);
+                    if (byte == 0b11111111) {
+                        dvs_event.t += 0b11111110;
+                    } else if (byte != 0b11111110) {
+                        dvs_event.t += ((byte & 0b1111111) >> 1);
+                        dvs_event.is_increase = ((byte & 1) == 1);
                         _state = state::byte0;
                     }
                     return false;
                 }
                 case state::byte0: {
-                    _dvs_event.x |= (static_cast<uint16_t>(byte & 0b111111) << 4);
-                    _dvs_event.y = ((byte & 0b11000000) >> 6);
+                    dvs_event.x = byte;
                     _state = state::byte1;
                     return false;
                 }
                 case state::byte1: {
-                    _dvs_event.y |= (static_cast<uint16_t>(byte & 0b1111111) << 2);
-                    _dvs_event.is_increase = (((byte & 0b10000000) >> 7) == 1);
+                    dvs_event.x |= (byte << 8);
+                    _state = state::byte2;
+                    return false;
+                }
+                case state::byte2: {
+                    dvs_event.y = byte;
+                    _state = state::byte3;
+                    return false;
+                }
+                case state::byte3: {
+                    dvs_event.y |= (byte << 8);
                     _state = state::idle;
-                    dvs_event = _dvs_event;
                     return true;
                 }
             }
         }
 
-        /// reset initialises the state machine.
+        /// reset initializes the state machine.
         virtual void reset() {
             _state = state::idle;
         }
@@ -929,10 +948,11 @@ namespace sepia {
             idle,
             byte0,
             byte1,
+            byte2,
+            byte3,
         };
 
         state _state;
-        dvs_event _dvs_event;
     };
 
     /// dvs_event_stream_observable is a template-specialised event_stream_observable for DVS events.
@@ -951,7 +971,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, event_stream_type::dvs);
+            consume_header(filename, _event_stream, event_stream_type::dvs);
             _loop = std::thread(
                 read_and_dispatch<dvs_event, handle_dvs_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -1019,7 +1039,7 @@ namespace sepia {
     /// atis_event_stream_writer writes events to an Event Stream file.
     class atis_event_stream_writer {
         public:
-        atis_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+        atis_event_stream_writer() : _logging(false), _previous_t(0) {
             _accessing_event_stream.clear(std::memory_order_release);
         }
         atis_event_stream_writer(const atis_event_stream_writer&) = delete;
@@ -1033,35 +1053,32 @@ namespace sepia {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
-                auto relative_timestamp = atis_event.t - _previous_timestamp;
-                if (relative_timestamp >= 31) {
-                    const auto number_of_overflows = relative_timestamp / 31;
-                    for (std::size_t index = 0; index < number_of_overflows / 7; ++index) {
-                        _event_stream.put(static_cast<uint8_t>(0b11111111));
+                auto relative_t = atis_event.t - _previous_t;
+                if (relative_t >= 0b111111) {
+                    const auto number_of_overflows = relative_t / 0b111111;
+                    for (std::size_t index = 0; index < number_of_overflows / 4; ++index) {
+                        _event_stream.put(0b11111111);
                     }
-                    const auto number_of_overflows_left = number_of_overflows % 7;
+                    const auto number_of_overflows_left = number_of_overflows % 4;
                     if (number_of_overflows_left > 0) {
-                        _event_stream.put(
-                            static_cast<uint8_t>(0b11111) | static_cast<uint8_t>(number_of_overflows_left << 5));
+                        _event_stream.put(0b11111100 | number_of_overflows_left);
                     }
-                    relative_timestamp -= number_of_overflows * 31;
+                    relative_t -= number_of_overflows * 0b111111;
                 }
-                _event_stream.put(
-                    static_cast<uint8_t>(relative_timestamp) | static_cast<uint8_t>((atis_event.x & 0b111) << 5));
-                _event_stream.put(
-                    static_cast<uint8_t>((atis_event.x & 0b111111000) >> 3)
-                    | static_cast<uint8_t>((atis_event.y & 0b11) << 6));
-                _event_stream.put(
-                    static_cast<uint8_t>((atis_event.y & 0b11111100) >> 2)
-                    | static_cast<uint8_t>(atis_event.is_threshold_crossing ? 0b1000000 : 0)
-                    | static_cast<uint8_t>(atis_event.polarity ? 0b10000000 : 0));
-                _previous_timestamp = atis_event.t;
+
+
+                _event_stream.put((relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0));
+                _event_stream.put(atis_event.x & 0b11111111);
+                _event_stream.put((atis_event.x & 0b1111111100000000) >> 8);
+                _event_stream.put(atis_event.y & 0b11111111);
+                _event_stream.put((atis_event.y & 0b1111111100000000) >> 8);
+                _previous_t = atis_event.t;
             }
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
         /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename) {
+        virtual void open(const std::string& filename, uint16_t width, uint16_t height) {
             _event_stream.open(filename, std::ifstream::binary);
             if (!_event_stream.good()) {
                 throw unwritable_file(filename);
@@ -1072,7 +1089,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, event_stream_type::atis);
+            write_header(_event_stream, event_stream_type::atis, width, height);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -1087,7 +1104,7 @@ namespace sepia {
             }
             _logging = false;
             _event_stream.close();
-            _previous_timestamp = 0;
+            _previous_t = 0;
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
@@ -1095,13 +1112,13 @@ namespace sepia {
         std::ofstream _event_stream;
         bool _logging;
         std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_timestamp;
+        uint64_t _previous_t;
     };
 
     /// handle_atis_byte implements the event stream state machine for ATIS events.
     class handle_atis_byte {
         public:
-        handle_atis_byte() : _state(state::idle), _atis_event(atis_event{0, 0, 0, false, false}) {}
+        handle_atis_byte() : _state(state::idle) {}
         handle_atis_byte(const handle_atis_byte&) = default;
         handle_atis_byte(handle_atis_byte&&) = default;
         handle_atis_byte& operator=(const handle_atis_byte&) = default;
@@ -1112,36 +1129,42 @@ namespace sepia {
         virtual bool operator()(uint8_t byte, atis_event& atis_event) {
             switch (_state) {
                 case state::idle: {
-                    if ((byte & 0b11111) == 0b11111) {
-                        _atis_event.t += ((byte & 0b11100000) >> 5) * 31;
+                    if ((byte & 0b11111100) == 0b11111100) {
+                        atis_event.t += 0b11111110 * (byte & 0b11);
                     } else {
-                        _atis_event.t = _atis_event.t + (byte & 0b11111);
-                        _atis_event.x = ((byte & 0b11100000) >> 5);
+                        atis_event.t += ((byte & 0b1111111) >> 1);
+                        atis_event.is_threshold_crossing = ((byte & 1) == 1);
+                        atis_event.polarity = ((byte & 0b10) == 0b10);
                         _state = state::byte0;
                     }
                     return false;
                 }
                 case state::byte0: {
-                    _atis_event.x |= (static_cast<uint16_t>(byte & 0b111111) << 3);
-                    _atis_event.y = ((byte & 0b11000000) >> 6);
+                    atis_event.x = byte;
                     _state = state::byte1;
                     return false;
                 }
                 case state::byte1: {
-                    _atis_event.y |= (static_cast<uint16_t>(byte & 0b111111) << 2);
-                    _atis_event.is_threshold_crossing = (((byte & 0b1000000) >> 6) == 1);
-                    _atis_event.polarity = (((byte & 0b10000000) >> 7) == 1);
+                    atis_event.x |= (byte << 8);
+                    _state = state::byte2;
+                    return false;
+                }
+                case state::byte2: {
+                    atis_event.y = byte;
+                    _state = state::byte3;
+                    return false;
+                }
+                case state::byte3: {
+                    atis_event.y |= (byte << 8);
                     _state = state::idle;
-                    atis_event = _atis_event;
                     return true;
                 }
             }
         }
 
-        /// reset initialises the state machine.
+        /// reset initializes the state machine.
         virtual void reset() {
             _state = state::idle;
-            _atis_event.t = 0;
         }
 
         protected:
@@ -1150,10 +1173,11 @@ namespace sepia {
             idle,
             byte0,
             byte1,
+            byte2,
+            byte3,
         };
 
         state _state;
-        atis_event _atis_event;
     };
 
     /// atis_event_stream_observable is a template-specialised event_stream_observable for ATIS events.
@@ -1172,7 +1196,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, event_stream_type::atis);
+            consume_header(filename, _event_stream, event_stream_type::atis);
             _loop = std::thread(
                 read_and_dispatch<atis_event, handle_atis_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -1240,7 +1264,7 @@ namespace sepia {
     /// color_event_stream_writer writes events to a color Event Stream file.
     class color_event_stream_writer {
         public:
-        color_event_stream_writer() : _logging(false), _previous_timestamp(0) {
+        color_event_stream_writer() : _logging(false), _previous_t(0) {
             _accessing_event_stream.clear(std::memory_order_release);
         }
         color_event_stream_writer(const color_event_stream_writer&) = delete;
@@ -1254,28 +1278,29 @@ namespace sepia {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
             if (_logging) {
-                auto relative_timestamp = color_event.t - _previous_timestamp;
-                if (relative_timestamp >= 127) {
-                    const auto number_of_overflows = relative_timestamp / 127;
+                auto relative_t = color_event.t - _previous_t;
+                if (relative_t >= 0b11111110) {
+                    const auto number_of_overflows = relative_t / 0b11111110;
                     for (std::size_t index = 0; index < number_of_overflows; ++index) {
                         _event_stream.put(static_cast<uint8_t>(0b11111111));
                     }
-                    relative_timestamp -= number_of_overflows * 127;
+                    relative_t -= number_of_overflows * 0b11111110;
                 }
-                _event_stream.put(
-                    static_cast<uint8_t>(relative_timestamp) | static_cast<uint8_t>((color_event.x & 0b1) << 7));
-                _event_stream.put(static_cast<uint8_t>((color_event.x & 0b111111110) >> 1));
-                _event_stream.put(static_cast<uint8_t>(color_event.y));
+                _event_stream.put(relative_t);
+                _event_stream.put(color_event.x & 0b11111111);
+                _event_stream.put((color_event.x & 0b1111111100000000) >> 8);
+                _event_stream.put(color_event.y & 0b11111111);
+                _event_stream.put((color_event.y & 0b1111111100000000) >> 8);
                 _event_stream.put(color_event.r);
                 _event_stream.put(color_event.g);
                 _event_stream.put(color_event.b);
-                _previous_timestamp = color_event.t;
+                _previous_t = color_event.t;
             }
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
         /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename) {
+        virtual void open(const std::string& filename, uint16_t width, uint16_t height) {
             _event_stream.open(filename, std::ifstream::binary);
             if (!_event_stream.good()) {
                 throw unwritable_file(filename);
@@ -1286,7 +1311,7 @@ namespace sepia {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, event_stream_type::color);
+            write_header(_event_stream, event_stream_type::color, width, height);
             _logging = true;
             _accessing_event_stream.clear(std::memory_order_release);
         }
@@ -1301,7 +1326,7 @@ namespace sepia {
             }
             _logging = false;
             _event_stream.close();
-            _previous_timestamp = 0;
+            _previous_t = 0;
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
@@ -1309,13 +1334,13 @@ namespace sepia {
         std::ofstream _event_stream;
         bool _logging;
         std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_timestamp;
+        uint64_t _previous_t;
     };
 
     /// handle_color_byte implements the event stream state machine for color events.
     class handle_color_byte {
         public:
-        handle_color_byte() : _state(state::idle), _color_event(color_event{0, 0, 0, 0, 0, 0}) {}
+        handle_color_byte() : _state(state::idle) {}
         handle_color_byte(const handle_color_byte&) = default;
         handle_color_byte(handle_color_byte&&) = default;
         handle_color_byte& operator=(const handle_color_byte&) = default;
@@ -1326,48 +1351,55 @@ namespace sepia {
         virtual bool operator()(uint8_t byte, color_event& color_event) {
             switch (_state) {
                 case state::idle: {
-                    if ((byte & 0b1111111) == 0b1111111) {
-                        _color_event.t += ((byte & 0b10000000) >> 7) * 127;
-                    } else {
-                        _color_event.t = _color_event.t + (byte & 0b1111111);
-                        _color_event.x = ((byte & 0b10000000) >> 7);
+                    if (byte == 0b11111111) {
+                        color_event.t += 0b11111110;
+                    } else if (byte != 0b11111110) {
+                        color_event.t += byte;
                         _state = state::byte0;
                     }
                     return false;
                 }
                 case state::byte0: {
-                    _color_event.x |= (static_cast<uint16_t>(byte) << 1);
+                    color_event.x = byte;
                     _state = state::byte1;
                     return false;
                 }
                 case state::byte1: {
-                    _color_event.y = byte;
+                    color_event.x |= (byte << 8);
                     _state = state::byte2;
                     return false;
                 }
                 case state::byte2: {
-                    _color_event.r = byte;
+                    color_event.y = byte;
                     _state = state::byte3;
                     return false;
                 }
                 case state::byte3: {
-                    _color_event.g = byte;
+                    color_event.y |= (byte << 8);
                     _state = state::byte4;
                     return false;
                 }
                 case state::byte4: {
-                    _color_event.b = byte;
+                    color_event.r = byte;
+                    _state = state::byte5;
+                    return false;
+                }
+                case state::byte5: {
+                    color_event.g = byte;
+                    _state = state::byte6;
+                    return false;
+                }
+                case state::byte6: {
+                    color_event.b = byte;
                     _state = state::idle;
-                    color_event = _color_event;
                     return true;
                 }
             }
         }
 
-        /// reset initialises the state machine.
+        /// reset initializes the state machine.
         virtual void reset() {
             _state = state::idle;
-            _color_event.t = 0;
         }
 
         protected:
@@ -1379,10 +1411,11 @@ namespace sepia {
             byte2,
             byte3,
             byte4,
+            byte5,
+            byte6,
         };
 
         state _state;
-        color_event _color_event;
     };
 
     /// color_event_stream_observable is a template-specialised event_stream_observable for color events.
@@ -1401,7 +1434,7 @@ namespace sepia {
             if (!_event_stream.good()) {
                 throw unreadable_file(filename);
             }
-            read_header(filename, _event_stream, event_stream_type::color);
+            consume_header(filename, _event_stream, event_stream_type::color);
             _loop = std::thread(
                 read_and_dispatch<color_event, handle_color_byte, MustRestart, HandleEvent, HandleException>,
                 std::ref(_event_stream),
@@ -2184,7 +2217,7 @@ namespace sepia {
         }
 
         /// to_parameter returns the provided parameter.
-        /// An error is thrown if the object was consrtructed with a string.
+        /// An error is thrown if the object was constructed with a string.
         virtual const parameter& to_parameter() const {
             if (_is_string) {
                 throw parameter_error("The unvalidated parameter is not a parameter");
