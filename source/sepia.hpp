@@ -153,29 +153,31 @@ namespace sepia {
     /// wrong_signature is thrown when an input file does not have the expected signature.
     class wrong_signature : public std::runtime_error {
         public:
-        wrong_signature(const std::string& filename) :
-            std::runtime_error("The file '" + filename + "' does not have the expected signature") {}
+        wrong_signature() : std::runtime_error("The stream does not have the expected signature") {}
     };
 
     /// unsupported_version is thrown when an Event Stream file uses an unsupported version.
     class unsupported_version : public std::runtime_error {
         public:
-        unsupported_version(const std::string& filename) :
-            std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported version") {}
+        unsupported_version() : std::runtime_error("The stream uses an unsupported version") {}
     };
 
     /// incomplete_header is thrown when the end of file is reached while reading the header.
     class incomplete_header : public std::runtime_error {
         public:
-        incomplete_header(const std::string& filename) :
-            std::runtime_error("The Event Stream file '" + filename + "' has an incomplete header") {}
+        incomplete_header() : std::runtime_error("The stream has an incomplete header") {}
     };
 
     /// unsupported_event_type is thrown when an Event Stream file uses an unsupported event type.
     class unsupported_event_type : public std::runtime_error {
         public:
-        unsupported_event_type(const std::string& filename) :
-            std::runtime_error("The Event Stream file '" + filename + "' uses an unsupported event type") {}
+        unsupported_event_type() : std::runtime_error("The stream uses an unsupported event type") {}
+    };
+
+    /// coordinates_overflow is thrown when an event has coordinates outside the range provided by the header.
+    class coordinates_overflow : public std::runtime_error {
+        public:
+        coordinates_overflow() : std::runtime_error("An event has coordinates outside the header-provided range") {}
     };
 
     /// end_of_file is thrown when the end of an input file is reached.
@@ -200,8 +202,10 @@ namespace sepia {
     /// parse_error is thrown when a JSON parse error occurs.
     class parse_error : public std::runtime_error {
         public:
-        parse_error(const std::string& what, uint32_t line) :
-            std::runtime_error("JSON parse error: " + what + " (line " + std::to_string(line) + ")") {}
+        parse_error(const std::string& what, std::size_t character_count, std::size_t line_count) :
+            std::runtime_error(
+                "JSON parse error: " + what + " (line " + std::to_string(line_count) + ":"
+                + std::to_string(character_count) + ")") {}
     };
 
     /// parameter_error is a logical error regarding a parameter.
@@ -209,6 +213,24 @@ namespace sepia {
         public:
         parameter_error(const std::string& what) : std::logic_error(what) {}
     };
+
+    /// filename_to_ifstream creates a readable stream from a file.
+    inline std::unique_ptr<std::ifstream> filename_to_ifstream(const std::string& filename) {
+        auto stream = make_unique<std::ifstream>(filename);
+        if (!stream->good()) {
+            throw unreadable_file(filename);
+        }
+        return stream;
+    }
+
+    /// filename_to_ofstream creates a writable stream from a file.
+    inline std::unique_ptr<std::ofstream> filename_to_ofstream(const std::string& filename) {
+        auto stream = make_unique<std::ofstream>(filename);
+        if (!stream->good()) {
+            throw unwritable_file(filename);
+        }
+        return stream;
+    }
 
     /// header bundles the parameters composing the stream's header.
     struct header {
@@ -218,17 +240,13 @@ namespace sepia {
         uint16_t height;
     };
 
-    /// read_header opens the given Event Stream, checks its header and retrieves meta-information.
-    inline header read_header(const std::string& filename) {
-        std::ifstream event_stream(filename);
-        if (!event_stream.good()) {
-            throw unreadable_file(filename);
-        }
+    /// read_header checks the header and retrieves meta-information from the given stream.
+    inline header read_header(std::istream& event_stream) {
         {
             auto read_signature = event_stream_signature();
             event_stream.read(&read_signature[0], read_signature.size());
             if (event_stream.eof() || read_signature != event_stream_signature()) {
-                throw wrong_signature(filename);
+                throw wrong_signature();
             }
         }
         header header = {};
@@ -236,17 +254,17 @@ namespace sepia {
             event_stream.read(
                 reinterpret_cast<char*>(header.event_stream_version.data()), header.event_stream_version.size());
             if (event_stream.eof()) {
-                throw incomplete_header(filename);
+                throw incomplete_header();
             }
             if (std::get<0>(header.event_stream_version) != std::get<0>(event_stream_version())
                 || std::get<1>(header.event_stream_version) < std::get<1>(event_stream_version())) {
-                throw unsupported_version(filename);
+                throw unsupported_version();
             }
         }
         {
             const char type_char = event_stream.get();
             if (event_stream.eof()) {
-                throw incomplete_header(filename);
+                throw incomplete_header();
             }
             const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
             if (type_byte == static_cast<uint8_t>(event_stream_type::generic)) {
@@ -258,14 +276,14 @@ namespace sepia {
             } else if (type_byte == static_cast<uint8_t>(event_stream_type::color)) {
                 header.event_stream_type = event_stream_type::color;
             } else {
-                throw unsupported_event_type(filename);
+                throw unsupported_event_type();
             }
         }
         if (header.event_stream_type != event_stream_type::generic) {
             std::array<uint8_t, 4> size_bytes;
             event_stream.read(reinterpret_cast<char*>(size_bytes.data()), size_bytes.size());
             if (event_stream.eof()) {
-                throw incomplete_header(filename);
+                throw incomplete_header();
             }
             header.width =
                 (static_cast<uint16_t>(std::get<0>(size_bytes))
@@ -277,8 +295,14 @@ namespace sepia {
         return header;
     }
 
+    /// read_header checks the header and retrieves meta-information from the given stream.
+    inline header read_header(std::unique_ptr<std::istream> event_stream) {
+        return read_header(*event_stream);
+    }
+
     /// write_header writes the header bytes to an byte stream.
-    inline void write_header(std::ostream& event_stream, event_stream_type event_stream_type, uint16_t width, uint16_t height) {
+    inline void
+    write_header(std::ostream& event_stream, event_stream_type event_stream_type, uint16_t width, uint16_t height) {
         event_stream.write("Event Stream", 12);
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
         auto type_byte = static_cast<uint8_t>(event_stream_type);
@@ -288,47 +312,6 @@ namespace sepia {
             event_stream.put((width & 0b1111111100000000) >> 8);
             event_stream.put(height & 0b11111111);
             event_stream.put((height & 0b1111111100000000) >> 8);
-        }
-    }
-
-    /// consume_header consumes the header bytes from a byte stream.
-    inline void
-    consume_header(const std::string& filename, std::istream& event_stream, event_stream_type expected_event_stream_type) {
-        {
-            auto read_signature = event_stream_signature();
-            event_stream.read(&read_signature[0], read_signature.size());
-            if (event_stream.eof() || read_signature != event_stream_signature()) {
-                throw wrong_signature(filename);
-            }
-        }
-        {
-            std::array<uint8_t, 3> read_event_stream_version;
-            event_stream.read(
-                reinterpret_cast<char*>(read_event_stream_version.data()), read_event_stream_version.size());
-            if (event_stream.eof()) {
-                throw incomplete_header(filename);
-            }
-            if (std::get<0>(read_event_stream_version) != std::get<0>(event_stream_version())
-                || std::get<1>(read_event_stream_version) < std::get<1>(event_stream_version())) {
-                throw unsupported_version(filename);
-            }
-        }
-        {
-            const char type_char = event_stream.get();
-            if (event_stream.eof()) {
-                throw incomplete_header(filename);
-            }
-            const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
-            if (type_byte != static_cast<uint8_t>(expected_event_stream_type)) {
-                throw unsupported_event_type(filename);
-            }
-        }
-        if (expected_event_stream_type != event_stream_type::generic) {
-            std::array<uint8_t, 4> size_bytes;
-            event_stream.read(reinterpret_cast<char*>(size_bytes.data()), size_bytes.size());
-            if (event_stream.eof()) {
-                throw incomplete_header(filename);
-            }
         }
     }
 
@@ -395,7 +378,7 @@ namespace sepia {
             typename HandleEvent,
             typename HandleException>
         static void read_and_dispatch(
-            std::ifstream& event_stream,
+            std::istream& event_stream,
             std::atomic_bool& running,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size,
@@ -599,7 +582,7 @@ namespace sepia {
     /// generic_event_stream_writer writes events to a generic Event Stream file.
     class generic_event_stream_writer {
         public:
-        generic_event_stream_writer() : _logging(false), _previous_t(0) {
+        generic_event_stream_writer() : _previous_t(0) {
             _accessing_event_stream.clear(std::memory_order_release);
         }
         generic_event_stream_writer(const generic_event_stream_writer&) = delete;
@@ -612,60 +595,63 @@ namespace sepia {
         virtual void operator()(generic_event generic_event) {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
-            if (_logging) {
+            if (_event_stream) {
                 auto relative_t = generic_event.t - _previous_t;
                 if (relative_t >= 0b11111110) {
                     const auto number_of_overflows = relative_t / 0b11111110;
                     for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                        _event_stream.put(0b11111111);
+                        _event_stream->put(0b11111111);
                     }
                     relative_t -= number_of_overflows * 0b11111110;
                 }
-                _event_stream.put(relative_t);
+                _event_stream->put(relative_t);
                 for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
-                    _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) == 0 ? 0 : 1));
+                    _event_stream->put(((size & 0b1111111) << 1) | ((size >> 7) == 0 ? 0 : 1));
                 }
-                _event_stream.write(
+                _event_stream->write(
                     reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
                 _previous_t = generic_event.t;
             }
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
-        /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename) {
-            _event_stream.open(filename, std::ifstream::binary);
-            if (!_event_stream.good()) {
-                throw unwritable_file(filename);
-            }
+        /// open is a thread-safe method to start logging events to the given stream.
+        virtual void open(std::unique_ptr<std::ostream> event_stream) {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
-            if (_logging) {
+            if (_event_stream) {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Already logging");
             }
-            write_header(_event_stream, event_stream_type::generic, 0, 0);
-            _logging = true;
+            _event_stream = std::move(event_stream);
+            write_header(*_event_stream, event_stream_type::generic, 0, 0);
             _accessing_event_stream.clear(std::memory_order_release);
+        }
+
+        /// target is a thread-safe method to start logging events to the given file.
+        virtual void open(const std::string& filename) {
+            auto event_stream = make_unique<std::ofstream>(filename);
+            if (!event_stream->good()) {
+                throw unwritable_file(filename);
+            }
+            open(std::move(event_stream));
         }
 
         /// close is a thread-safe method to stop logging the events and close the file.
         virtual void close() {
             while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
             }
-            if (!_logging) {
+            if (!_event_stream) {
                 _accessing_event_stream.clear(std::memory_order_release);
                 throw std::runtime_error("Was not logging");
             }
-            _logging = false;
-            _event_stream.close();
+            _event_stream.reset();
             _previous_t = 0;
             _accessing_event_stream.clear(std::memory_order_release);
         }
 
         protected:
-        std::ofstream _event_stream;
-        bool _logging;
+        std::unique_ptr<std::ostream> _event_stream;
         std::atomic_flag _accessing_event_stream;
         uint64_t _previous_t;
     };
@@ -737,26 +723,26 @@ namespace sepia {
         std::size_t _bytes_size;
     };
 
-    /// generic_event_stream_observable is a template-specialised event_stream_observable for generic events.
+    /// generic_event_stream_observable is a template-specialized event_stream_observable for generic events.
     template <typename HandleEvent, typename HandleException, typename MustRestart>
     class generic_event_stream_observable : public event_stream_observable {
         public:
         generic_event_stream_observable(
-            const std::string& filename,
+            std::unique_ptr<std::istream> event_stream,
             HandleEvent handle_event,
             HandleException handle_exception,
             MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
-            _event_stream(filename, std::ifstream::binary),
+            _event_stream(std::move(event_stream)),
             _running(true) {
-            if (!_event_stream.good()) {
-                throw unreadable_file(filename);
+            const auto header = read_header(*_event_stream);
+            if (header.event_stream_type != event_stream_type::generic) {
+                throw unsupported_event_type();
             }
-            consume_header(filename, _event_stream, event_stream_type::generic);
             _loop = std::thread(
                 read_and_dispatch<generic_event, handle_generic_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(_event_stream),
+                std::ref(*_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
@@ -775,7 +761,7 @@ namespace sepia {
         }
 
         protected:
-        std::ifstream _event_stream;
+        std::unique_ptr<std::istream> _event_stream;
         std::atomic_bool _running;
         std::thread _loop;
     };
@@ -955,26 +941,26 @@ namespace sepia {
         state _state;
     };
 
-    /// dvs_event_stream_observable is a template-specialised event_stream_observable for DVS events.
+    /// dvs_event_stream_observable is a template-specialized event_stream_observable for DVS events.
     template <typename HandleEvent, typename HandleException, typename MustRestart>
     class dvs_event_stream_observable : public event_stream_observable {
         public:
         dvs_event_stream_observable(
-            const std::string& filename,
+            std::unique_ptr<std::istream> event_stream,
             HandleEvent handle_event,
             HandleException handle_exception,
             MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
-            _event_stream(filename, std::ifstream::binary),
+            _event_stream(std::move(event_stream)),
             _running(true) {
-            if (!_event_stream.good()) {
-                throw unreadable_file(filename);
+            const auto header = read_header(*_event_stream);
+            if (header.event_stream_type != event_stream_type::dvs) {
+                throw unsupported_event_type();
             }
-            consume_header(filename, _event_stream, event_stream_type::dvs);
             _loop = std::thread(
                 read_and_dispatch<dvs_event, handle_dvs_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(_event_stream),
+                std::ref(*_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
@@ -993,7 +979,7 @@ namespace sepia {
         }
 
         protected:
-        std::ifstream _event_stream;
+        std::unique_ptr<std::istream> _event_stream;
         std::atomic_bool _running;
         std::thread _loop;
     };
@@ -1002,14 +988,14 @@ namespace sepia {
     template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
     std::unique_ptr<dvs_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_dvs_event_stream_observable(
-        const std::string& filename,
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         HandleException handle_exception,
         MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
         return sepia::make_unique<dvs_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
-            filename,
+            std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::forward<HandleException>(handle_exception),
             std::forward<MustRestart>(must_restart),
@@ -1021,12 +1007,12 @@ namespace sepia {
     /// the input file is reached.
     template <typename HandleEvent>
     void join_dvs_event_stream_observable(
-        const std::string& filename,
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto dvs_event_stream_observable = make_dvs_event_stream_observable(
-            filename,
+            std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
@@ -1066,8 +1052,9 @@ namespace sepia {
                     relative_t -= number_of_overflows * 0b111111;
                 }
 
-
-                _event_stream.put((relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0));
+                _event_stream.put(
+                    (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00)
+                    | (atis_event.is_threshold_crossing ? 1 : 0));
                 _event_stream.put(atis_event.x & 0b11111111);
                 _event_stream.put((atis_event.x & 0b1111111100000000) >> 8);
                 _event_stream.put(atis_event.y & 0b11111111);
@@ -1180,26 +1167,26 @@ namespace sepia {
         state _state;
     };
 
-    /// atis_event_stream_observable is a template-specialised event_stream_observable for ATIS events.
+    /// atis_event_stream_observable is a template-specialized event_stream_observable for ATIS events.
     template <typename HandleEvent, typename HandleException, typename MustRestart>
     class atis_event_stream_observable : public event_stream_observable {
         public:
         atis_event_stream_observable(
-            const std::string& filename,
+            std::unique_ptr<std::istream> event_stream,
             HandleEvent handle_event,
             HandleException handle_exception,
             MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
-            _event_stream(filename, std::ifstream::binary),
+            _event_stream(std::move(event_stream)),
             _running(true) {
-            if (!_event_stream.good()) {
-                throw unreadable_file(filename);
+            const auto header = read_header(*_event_stream);
+            if (header.event_stream_type != event_stream_type::atis) {
+                throw unsupported_event_type();
             }
-            consume_header(filename, _event_stream, event_stream_type::atis);
             _loop = std::thread(
                 read_and_dispatch<atis_event, handle_atis_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(_event_stream),
+                std::ref(*_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
@@ -1218,7 +1205,7 @@ namespace sepia {
         }
 
         protected:
-        std::ifstream _event_stream;
+        std::unique_ptr<std::istream> _event_stream;
         std::atomic_bool _running;
         std::thread _loop;
     };
@@ -1227,14 +1214,14 @@ namespace sepia {
     template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
     std::unique_ptr<atis_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_atis_event_stream_observable(
-        const std::string& filename,
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         HandleException handle_exception,
         MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
         return sepia::make_unique<atis_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
-            filename,
+            std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::forward<HandleException>(handle_exception),
             std::forward<MustRestart>(must_restart),
@@ -1246,12 +1233,12 @@ namespace sepia {
     /// the input file is reached.
     template <typename HandleEvent>
     void join_atis_event_stream_observable(
-        const std::string& filename,
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto atis_event_stream_observable = make_atis_event_stream_observable(
-            filename,
+            std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
@@ -1418,26 +1405,26 @@ namespace sepia {
         state _state;
     };
 
-    /// color_event_stream_observable is a template-specialised event_stream_observable for color events.
+    /// color_event_stream_observable is a template-specialized event_stream_observable for color events.
     template <typename HandleEvent, typename HandleException, typename MustRestart>
     class color_event_stream_observable : public event_stream_observable {
         public:
         color_event_stream_observable(
-            const std::string& filename,
+            std::unique_ptr<std::istream> event_stream,
             HandleEvent handle_event,
             HandleException handle_exception,
             MustRestart must_restart,
             event_stream_observable::dispatch dispatch,
             std::size_t chunk_size) :
-            _event_stream(filename, std::ifstream::binary),
+            _event_stream(std::move(event_stream)),
             _running(true) {
-            if (!_event_stream.good()) {
-                throw unreadable_file(filename);
+            const auto header = read_header(*_event_stream);
+            if (header.event_stream_type != event_stream_type::color) {
+                throw unsupported_event_type();
             }
-            consume_header(filename, _event_stream, event_stream_type::color);
             _loop = std::thread(
                 read_and_dispatch<color_event, handle_color_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(_event_stream),
+                std::ref(*_event_stream),
                 std::ref(_running),
                 dispatch,
                 chunk_size,
@@ -1456,7 +1443,7 @@ namespace sepia {
         }
 
         protected:
-        std::ifstream _event_stream;
+        std::unique_ptr<std::istream> _event_stream;
         std::atomic_bool _running;
         std::thread _loop;
     };
@@ -1465,14 +1452,14 @@ namespace sepia {
     template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
     std::unique_ptr<color_event_stream_observable<HandleEvent, HandleException, MustRestart>>
     make_color_event_stream_observable(
-        const std::string& filename,
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         HandleException handle_exception,
         MustRestart must_restart = &false_function,
         event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
         return sepia::make_unique<color_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
-            filename,
+            std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::forward<HandleException>(handle_exception),
             std::forward<MustRestart>(must_restart),
@@ -1484,12 +1471,12 @@ namespace sepia {
     /// the input file is reached.
     template <typename HandleEvent>
     void join_color_event_stream_observable(
-        const std::string& filename,
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto color_event_stream_observable = make_color_event_stream_observable(
-            filename,
+            std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
@@ -1499,12 +1486,12 @@ namespace sepia {
         capture_observable_exception.rethrow_unless<end_of_file>();
     }
 
-    /// Forward-declare parameter for referencing in unvalidated_parameter.
+    /// forward-declare parameter for referencing in unvalidated_parameter.
     class parameter;
 
-    /// Forward-declare object_parameter and list_parameter for referencing in parameter.
+    /// forward-declare object_parameter and array_parameter for referencing in parameter.
     class object_parameter;
-    class list_parameter;
+    class array_parameter;
 
     /// parameter corresponds to a setting or a group of settings.
     /// This class is used to validate the JSON parameters file, which is used to set the biases and other camera
@@ -1518,45 +1505,53 @@ namespace sepia {
         parameter& operator=(parameter&&) = default;
         virtual ~parameter(){};
 
-        /// get_list_parameter is used to retrieve a list parameter.
+        /// get_array_parameter is used to retrieve a list parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
         /// parameters). An error is raised at runtime if the parameter is not a list.
-        virtual const list_parameter& get_list_parameter(const std::vector<std::string>& keys) const {
-            return get_list_parameter(keys.begin(), keys.end());
+        virtual const array_parameter& get_array_parameter(const std::vector<std::string>& keys = {}) const {
+            return get_array_parameter(keys.begin(), keys.end());
         }
 
         /// get_boolean is used to retrieve a boolean parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
         /// parameters). An error is raised at runtime if the parameter is not a boolean.
-        virtual bool get_boolean(const std::vector<std::string>& keys) const {
+        virtual bool get_boolean(const std::vector<std::string>& keys = {}) const {
             return get_boolean(keys.begin(), keys.end());
         }
 
         /// get_number is used to retrieve a numeric parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
         /// parameters). An error is raised at runtime if the parameter is not a number.
-        virtual double get_number(const std::vector<std::string>& keys) const {
+        virtual double get_number(const std::vector<std::string>& keys = {}) const {
             return get_number(keys.begin(), keys.end());
         }
 
         /// get_string is used to retrieve a string parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
         /// parameters). An error is raised at runtime if the parameter is not a string.
-        virtual std::string get_string(const std::vector<std::string>& keys) const {
+        virtual std::string get_string(const std::vector<std::string>& keys = {}) const {
             return get_string(keys.begin(), keys.end());
         }
 
-        /// load sets the parameter value from a string which contains JSON data.
+        /// parse sets the parameter value from a JSON stream owned by the caller.
         /// The given data is validated in the process.
-        virtual void load(const std::string& json_data) {
-            if (json_data != std::string()) {
-                uint32_t line = 1;
-                load(json_data.begin(), json_data.end(), line);
-            }
+        /// The stream must be reset afterwards to be used again:
+        ///     json_stream.clear();
+        ///     json_stream.seekg(0, std::istream::beg);
+        virtual void parse(std::istream& json_stream) {
+            std::size_t character_count = 1;
+            std::size_t line_count = 1;
+            load(json_stream, character_count, line_count);
         }
 
-        /// get_list_parameter is called by a parent parameter when accessing a list value.
-        virtual const list_parameter& get_list_parameter(
+        /// parse sets the parameter value from a JSON stream.
+        /// The given data is validated in the process.
+        virtual void parse(std::unique_ptr<std::istream> json_stream) {
+            parse(*json_stream);
+        }
+
+        /// get_array_parameter is called by a parent parameter when accessing a list value.
+        virtual const array_parameter& get_array_parameter(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
             throw parameter_error("The parameter is not a list");
@@ -1587,36 +1582,186 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const = 0;
 
         /// load is called by a parent parameter when loading JSON data.
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) = 0;
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) = 0;
 
         /// load sets the parameter value from an other parameter.
         /// The other parameter must a subset of this parameter, and is validated in the process.
         virtual void load(const parameter& parameter) = 0;
 
         protected:
-        /// trim removes white space and line break characters.
-        static const std::string::const_iterator
-        trim(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line_count) {
-            auto trim_iterator = begin;
-            for (; trim_iterator != file_end && has_character(whitespace_characters, *trim_iterator); ++trim_iterator) {
-                if (*trim_iterator == '\n') {
-                    ++line_count;
-                }
-            }
-            return trim_iterator;
-        }
-
         /// has_character determines wheter a character is in a string of characters.
         static constexpr bool has_character(const char* characters, const char character) {
             return *characters != '\0' && (*characters == character || has_character(characters + 1, character));
         }
 
-        static constexpr const char* whitespace_characters = " \n\t\v\f\r\0";
+        /// trim removes white space and line break characters.
+        static void trim(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) {
+            for (;;) {
+                const auto character = json_stream.peek();
+                if (character == '\n') {
+                    json_stream.get();
+                    ++line_count;
+                    character_count = 1;
+                } else if (std::isspace(character)) {
+                    json_stream.get();
+                    ++character_count;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        /// string reads a string from a stream.
+        static std::string string(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) {
+            {
+                const auto character = json_stream.get();
+                if (character != '"') {
+                    throw parse_error("the key does not start with quotes", character_count, line_count);
+                }
+                ++character_count;
+            }
+            auto escaped = false;
+            std::string characters;
+            for (;;) {
+                const auto character = json_stream.get();
+                if (json_stream.eof()) {
+                    throw parse_error("unexpected end of file", character_count, line_count);
+                }
+                if (escaped) {
+                    characters.push_back(character);
+                    escaped = false;
+                    if (character == '\n') {
+                        character_count = 1;
+                        ++line_count;
+                    } else {
+                        ++character_count;
+                    }
+                } else {
+                    if (character == '\\') {
+                        escaped = true;
+                        ++character_count;
+                    } else if (character == '"') {
+                        ++character_count;
+                        break;
+                    } else if (has_character(control_characters, character)) {
+                        throw parse_error("unexpected control character", character_count, line_count);
+                    } else {
+                        characters.push_back(character);
+                        if (character == '\n') {
+                            character_count = 1;
+                            ++line_count;
+                        } else {
+                            ++character_count;
+                        }
+                    }
+                }
+            }
+            return characters;
+        }
+
+        /// number reads a number from a stream.
+        static double number(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) {
+            std::string characters;
+            uint8_t state = 0;
+            auto done = false;
+            for (;;) {
+                const auto character = json_stream.peek();
+                switch (state) {
+                    case 0:
+                        if (character == '-') {
+                            state = 1;
+                        } else if (character == '0') {
+                            characters.push_back(character);
+                            state = 2;
+                        } else if (std::isdigit(character)) {
+                            characters.push_back(character);
+                            state = 3;
+                        } else {
+                            throw parse_error("unexpected character in a number", character_count, line_count);
+                        }
+                        break;
+                    case 1:
+                        if (character == '0') {
+                            characters.push_back(character);
+                            state = 2;
+                        } else if (std::isdigit(character)) {
+                            characters.push_back(character);
+                            state = 3;
+                        } else {
+                            throw parse_error("unexpected character in a number", character_count, line_count);
+                        }
+                        break;
+                    case 2:
+                        if (character == '.') {
+                            state = 4;
+                        } else if (character == 'e' || character == 'E') {
+                            characters.push_back(character);
+                            state = 6;
+                        } else {
+                            done = true;
+                        }
+                        break;
+                    case 3:
+                        if (character == '.') {
+                            state = 4;
+                        } else if (character == 'e' || character == 'E') {
+                            characters.push_back(character);
+                            state = 6;
+                        } else if (std::isdigit(character)) {
+                            characters.push_back(character);
+                        } else {
+                            done = true;
+                        }
+                        break;
+                    case 4:
+                        if (std::isdigit(character)) {
+                            characters.push_back(character);
+                            state = 5;
+                        } else {
+                            throw parse_error("unexpected character in a number", character_count, line_count);
+                        }
+                        break;
+                    case 5:
+                        if (std::isdigit(character)) {
+                            characters.push_back(character);
+                        } else if (character == 'e' || character == 'E') {
+                            characters.push_back(character);
+                            state = 6;
+                        } else {
+                            done = true;
+                        }
+                        break;
+                    case 6:
+                        if (character == '+' || character == '-' || std::isdigit(character)) {
+                            characters.push_back(character);
+                            state = 7;
+                        } else {
+                            throw parse_error("unexpected character in a number", character_count, line_count);
+                        }
+                        break;
+                    case 7:
+                        if (std::isdigit(character)) {
+                            characters.push_back(character);
+                        } else {
+                            done = true;
+                        }
+                        break;
+                    default:
+                        throw std::logic_error("unexpected state");
+                }
+                if (done) {
+                    break;
+                }
+                json_stream.get();
+            }
+            return std::stod(characters);
+        }
+
+        static constexpr const char* control_characters = "/\b\f\n\r\t\0";
         static constexpr const char* separation_characters = ",}]\0";
     };
 
-    /// object_parameter is a specialised parameter which contains other parameters.
+    /// object_parameter is a specialized parameter which contains other parameters.
     class object_parameter : public parameter {
         public:
         object_parameter() : parameter() {}
@@ -1635,13 +1780,13 @@ namespace sepia {
         object_parameter& operator=(const object_parameter&) = delete;
         object_parameter& operator=(object_parameter&&) = default;
         virtual ~object_parameter() {}
-        const list_parameter& get_list_parameter(
+        const array_parameter& get_array_parameter(
             const std::vector<std::string>::const_iterator key,
             const std::vector<std::string>::const_iterator end) const override {
             if (key == end) {
                 throw parameter_error("not enough keys");
             }
-            return _parameter_by_key.at(*key)->get_list_parameter(key + 1, end);
+            return _parameter_by_key.at(*key)->get_array_parameter(key + 1, end);
         }
         bool get_boolean(
             const std::vector<std::string>::const_iterator key,
@@ -1674,75 +1819,77 @@ namespace sepia {
             }
             return sepia::make_unique<object_parameter>(std::move(new_parameter_by_key));
         }
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
-            begin = trim(begin, file_end, line);
-            if (*begin != '{') {
-                throw parse_error("the object does not begin with a brace", line);
-            }
-            ++begin;
-            auto status = ObjectExpecting::whitespace;
-            auto end = begin;
-            auto key = std::string();
-            for (; *end != '}';) {
-                if (end == file_end) {
-                    throw parse_error("unexpected end of file (a closing brace might be missing)", line);
-                }
-                switch (status) {
-                    case ObjectExpecting::whitespace:
-                        end = trim(end, file_end, line);
-                        status = ObjectExpecting::key;
-                        break;
-                    case ObjectExpecting::key:
-                        if (*end != '"') {
-                            throw parse_error("the key does not start with quotes", line);
-                        }
-                        ++end;
-                        status = ObjectExpecting::first_key_letter;
-                        break;
-                    case ObjectExpecting::first_key_letter:
-                        if (*end == '"') {
-                            throw parse_error("the key is an empty string", line);
-                        }
-                        begin = end;
-                        ++end;
-                        status = ObjectExpecting::key_letter;
-                        break;
-                    case ObjectExpecting::key_letter:
-                        if (*end == '"') {
-                            key = std::string(begin, end);
-                            ++end;
-                            end = trim(end, file_end, line);
-                            status = ObjectExpecting::key_separator;
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+            uint8_t state = 0;
+            std::string key;
+            auto done = false;
+            while (!done) {
+                trim(json_stream, character_count, line_count);
+                switch (state) {
+                    case 0:
+                        if (json_stream.get() == '{') {
+                            ++character_count;
+                            state = 1;
                         } else {
-                            ++end;
+                            throw parse_error("the object does not begin with a brace", character_count, line_count);
                         }
                         break;
-                    case ObjectExpecting::key_separator:
-                        if (*end != ':') {
-                            throw parse_error("key separator ':' not found", line);
+                    case 1:
+                        if (json_stream.peek() == '}') {
+                            json_stream.get();
+                            ++character_count;
+                            done = true;
+                        } else {
+                            key = string(json_stream, character_count, line_count);
+                            if (key.empty()) {
+                                throw parse_error("the key is an empty string", character_count, line_count);
+                            }
+                            if (_parameter_by_key.find(key) == _parameter_by_key.end()) {
+                                throw parse_error("unexpected key '" + key + "'", character_count, line_count);
+                            }
+                            state = 2;
                         }
-                        ++end;
-                        status = ObjectExpecting::field;
                         break;
-                    case ObjectExpecting::field:
+                    case 2:
+                        if (json_stream.get() == ':') {
+                            ++character_count;
+                            state = 3;
+                        } else {
+                            throw parse_error("missing key separator ':'", character_count, line_count);
+                        }
+                        break;
+                    case 3:
+                        _parameter_by_key[key]->load(json_stream, character_count, line_count);
+                        state = 4;
+                        break;
+                    case 4: {
+                        const auto character = json_stream.get();
+                        if (character == '}') {
+                            ++character_count;
+                            done = true;
+                        } else if (character == ',') {
+                            ++character_count;
+                            state = 5;
+                        } else {
+                            throw parse_error("expected '}' or ','", character_count, line_count);
+                        }
+                        break;
+                    }
+                    case 5: {
+                        key = string(json_stream, character_count, line_count);
+                        if (key.empty()) {
+                            throw parse_error("the key is an empty string", character_count, line_count);
+                        }
                         if (_parameter_by_key.find(key) == _parameter_by_key.end()) {
-                            throw parse_error("unexpected key " + key, line);
+                            throw parse_error("unexpected key '" + key + "'", character_count, line_count);
                         }
-                        end = _parameter_by_key[key]->load(end, file_end, line);
-                        status = ObjectExpecting::field_separator;
+                        state = 2;
                         break;
-                    case ObjectExpecting::field_separator:
-                        if (*end != ',') {
-                            throw parse_error("field separator ',' not found", line);
-                        }
-                        ++end;
-                        status = ObjectExpecting::whitespace;
-                        break;
+                    }
+                    default:
+                        throw std::logic_error("unexpected state");
                 }
             }
-            ++end;
-            return trim(end, file_end, line);
         }
         virtual void load(const parameter& parameter) override {
             try {
@@ -1769,49 +1916,40 @@ namespace sepia {
         }
 
         protected:
-        /// ObjectExpecting describes the next character expected by the parser.
-        enum class ObjectExpecting {
-            whitespace,
-            key,
-            first_key_letter,
-            key_letter,
-            key_separator,
-            field,
-            field_separator,
-        };
-
         std::unordered_map<std::string, std::unique_ptr<parameter>> _parameter_by_key;
     };
 
-    /// list_parameter is a specialised parameter which contains other parameters.
-    class list_parameter : public parameter {
+    /// array_parameter is a specialized parameter which contains other parameters.
+    class array_parameter : public parameter {
         public:
         /// make_empty generates an empty list parameter with the given value as template.
-        static std::unique_ptr<list_parameter> make_empty(std::unique_ptr<parameter> template_parameter) {
-            return sepia::make_unique<list_parameter>(
+        static std::unique_ptr<array_parameter> make_empty(std::unique_ptr<parameter> template_parameter) {
+            return sepia::make_unique<array_parameter>(
                 std::vector<std::unique_ptr<parameter>>(), std::move(template_parameter));
         }
 
         template <typename Parameter>
-        list_parameter(Parameter&& template_parameter) : parameter(), _template_parameter(template_parameter->clone()) {
+        array_parameter(Parameter&& template_parameter) :
+            parameter(),
+            _template_parameter(template_parameter->clone()) {
             _parameters.push_back(std::move(template_parameter));
         }
         template <typename Parameter, typename... Rest>
-        list_parameter(Parameter&& parameter, Rest&&... rest) : list_parameter(std::forward<Rest>(rest)...) {
+        array_parameter(Parameter&& parameter, Rest&&... rest) : array_parameter(std::forward<Rest>(rest)...) {
             _parameters.insert(_parameters.begin(), std::move(std::forward<Parameter>(parameter)));
         }
-        list_parameter(
+        array_parameter(
             std::vector<std::unique_ptr<parameter>> parameters,
             std::unique_ptr<parameter> template_parameter) :
             parameter(),
             _parameters(std::move(parameters)),
             _template_parameter(std::move(template_parameter)) {}
-        list_parameter(const list_parameter&) = delete;
-        list_parameter(list_parameter&&) = default;
-        list_parameter& operator=(const list_parameter&) = delete;
-        list_parameter& operator=(list_parameter&&) = default;
-        virtual ~list_parameter() {}
-        virtual const list_parameter& get_list_parameter(
+        array_parameter(const array_parameter&) = delete;
+        array_parameter(array_parameter&&) = default;
+        array_parameter& operator=(const array_parameter&) = delete;
+        array_parameter& operator=(array_parameter&&) = default;
+        virtual ~array_parameter() {}
+        virtual const array_parameter& get_array_parameter(
             const std::vector<std::string>::const_iterator key,
             const std::vector<std::string>::const_iterator end) const override {
             if (key != end) {
@@ -1824,56 +1962,69 @@ namespace sepia {
             for (const auto& parameter : _parameters) {
                 new_parameters.push_back(parameter->clone());
             }
-            return sepia::make_unique<list_parameter>(std::move(new_parameters), _template_parameter->clone());
+            return sepia::make_unique<array_parameter>(std::move(new_parameters), _template_parameter->clone());
         }
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             _parameters.clear();
-            begin = trim(begin, file_end, line);
-            if (*begin != '[') {
-                throw parse_error("the list does not begin with a bracket", line);
-            }
-            ++begin;
-            auto status = ListExpecting::whitespace;
-            auto end = begin;
-            auto key = std::string();
-            for (; *end != ']';) {
-                if (end == file_end) {
-                    throw parse_error("unexpected end of file (a closing brace might be missing)", line);
-                }
-                switch (status) {
-                    case ListExpecting::whitespace:
-                        end = trim(end, file_end, line);
-                        status = ListExpecting::field;
-                        break;
-                    case ListExpecting::field:
-                        _parameters.push_back(_template_parameter->clone());
-                        end = _parameters.back()->load(end, file_end, line);
-                        status = ListExpecting::field_separator;
-                        break;
-                    case ListExpecting::field_separator:
-                        if (*end != ',') {
-                            throw parse_error("field separator ',' not found", line);
+            uint8_t state = 0;
+            std::string key;
+            auto done = false;
+            while (!done) {
+                trim(json_stream, character_count, line_count);
+                switch (state) {
+                    case 0:
+                        if (json_stream.get() == '[') {
+                            ++character_count;
+                            state = 1;
+                        } else {
+                            throw parse_error("the array does not begin with a bracket", character_count, line_count);
                         }
-                        ++end;
-                        status = ListExpecting::whitespace;
                         break;
+                    case 1:
+                        if (json_stream.peek() == ']') {
+                            json_stream.get();
+                            ++character_count;
+                            done = true;
+                        } else {
+                            _parameters.push_back(_template_parameter->clone());
+                            _parameters.back()->load(json_stream, character_count, line_count);
+                            state = 2;
+                        }
+                        break;
+                    case 2: {
+                        const auto character = json_stream.get();
+                        if (character == ']') {
+                            ++character_count;
+                            done = true;
+                        } else if (character == ',') {
+                            ++character_count;
+                            state = 3;
+                        } else {
+                            throw parse_error("expected ']' or ','", character_count, line_count);
+                        }
+                        break;
+                    }
+                    case 3:
+                        _parameters.push_back(_template_parameter->clone());
+                        _parameters.back()->load(json_stream, character_count, line_count);
+                        state = 2;
+                        break;
+                    default:
+                        throw std::logic_error("unexpected state");
                 }
             }
-            ++end;
-            return trim(end, file_end, line);
         }
         virtual void load(const parameter& parameter) override {
             try {
-                const list_parameter& casted_list_parameter = dynamic_cast<const list_parameter&>(parameter);
+                const array_parameter& casted_array_parameter = dynamic_cast<const array_parameter&>(parameter);
                 _parameters.clear();
-                for (const auto& stored_parameter : casted_list_parameter) {
+                for (const auto& stored_parameter : casted_array_parameter) {
                     auto new_parameter = _template_parameter->clone();
                     new_parameter->load(*stored_parameter);
                     _parameters.push_back(std::move(new_parameter));
                 }
             } catch (const std::bad_cast& exception) {
-                throw std::logic_error("Expected an object_parameter, got a " + std::string(typeid(parameter).name()));
+                throw std::logic_error("Expected an array_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -1893,18 +2044,11 @@ namespace sepia {
         }
 
         protected:
-        /// ListExpecting describes the next character expected by the parser.
-        enum class ListExpecting {
-            whitespace,
-            field,
-            field_separator,
-        };
-
         std::vector<std::unique_ptr<parameter>> _parameters;
         std::unique_ptr<parameter> _template_parameter;
     };
 
-    /// boolean_parameter is a specialised parameter for boolean values.
+    /// boolean_parameter is a specialized parameter for boolean values.
     class boolean_parameter : public parameter {
         public:
         boolean_parameter(bool value) : parameter(), _value(value) {}
@@ -1924,24 +2068,24 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<boolean_parameter>(_value);
         }
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
-            begin = trim(begin, file_end, line);
-            auto end = begin;
-            for (; !has_character(separation_characters, *end) && !has_character(whitespace_characters, *end); ++end) {
-                if (end == file_end) {
-                    throw parse_error("unexpected end of file", line);
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+            trim(json_stream, character_count, line_count);
+            std::string characters;
+            for (;;) {
+                const auto character = json_stream.peek();
+                if (std::isspace(character) || has_character(separation_characters, character) || json_stream.eof()) {
+                    break;
                 }
+                characters.push_back(character);
+                json_stream.get();
             }
-            const auto trimmed_json_data = std::string(begin, end);
-            if (trimmed_json_data == "true") {
+            if (characters == "true") {
                 _value = true;
-            } else if (trimmed_json_data == "false") {
+            } else if (characters == "false") {
                 _value = false;
             } else {
-                throw parse_error("expected a boolean", line);
+                throw parse_error("expected a boolean", character_count, line_count);
             }
-            return trim(end, file_end, line);
         }
         virtual void load(const parameter& parameter) override {
             try {
@@ -1955,7 +2099,7 @@ namespace sepia {
         bool _value;
     };
 
-    /// number_parameter is a specialised parameter for numeric values.
+    /// number_parameter is a specialized parameter for numeric values.
     class number_parameter : public parameter {
         public:
         number_parameter(double value, double minimum, double maximum, bool is_integer) :
@@ -1982,30 +2126,18 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<number_parameter>(_value, _minimum, _maximum, _is_integer);
         }
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
-            begin = trim(begin, file_end, line);
-            auto end = begin;
-            for (; !has_character(separation_characters, *end) && !has_character(whitespace_characters, *end); ++end) {
-                if (end == file_end) {
-                    throw parse_error("unexpected end of file", line);
-                }
-            }
-            try {
-                _value = std::stod(std::string(begin, end));
-            } catch (const std::invalid_argument&) {
-                throw parse_error("expected a number", line);
-            }
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+            trim(json_stream, character_count, line_count);
+            _value = number(json_stream, character_count, line_count);
             try {
                 validate();
             } catch (const parameter_error& exception) {
-                throw parse_error(exception.what(), line);
+                throw parse_error(exception.what(), character_count, line_count);
             }
-            return trim(end, file_end, line);
         }
         virtual void load(const parameter& parameter) override {
             try {
-                _value = parameter.get_number({});
+                _value = parameter.get_number();
             } catch (const parameter_error& exception) {
                 throw std::logic_error("Expected a number_parameter, got a " + std::string(typeid(parameter).name()));
             }
@@ -2036,7 +2168,7 @@ namespace sepia {
         bool _is_integer;
     };
 
-    /// char_parameter is a specialised number parameter for char numeric values.
+    /// char_parameter is a specialized number parameter for char numeric values.
     class char_parameter : public number_parameter {
         public:
         char_parameter(double value) : number_parameter(value, 0, 256, true) {}
@@ -2050,7 +2182,7 @@ namespace sepia {
         }
     };
 
-    /// string_parameter is a specialised parameter for string values.
+    /// string_parameter is a specialized parameter for string values.
     class string_parameter : public parameter {
         public:
         string_parameter(const std::string& value) : parameter(), _value(value) {}
@@ -2070,26 +2202,9 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<string_parameter>(_value);
         }
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
-            begin = trim(begin, file_end, line);
-            if (*begin != '"') {
-                throw parse_error("the string does not start with quotes", line);
-            }
-            ++begin;
-            auto end = begin;
-            for (; *end != '"'; ++end) {
-                if (end == file_end) {
-                    throw parse_error("unexpected end of file", line);
-                }
-
-                if (*end == '\n') {
-                    throw parse_error("strings cannot contain linebreaks", line);
-                }
-            }
-            _value = std::string(begin, end);
-            ++end;
-            return trim(end, file_end, line);
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+            trim(json_stream, character_count, line_count);
+            _value = string(json_stream, character_count, line_count);
         }
         virtual void load(const parameter& parameter) override {
             try {
@@ -2103,7 +2218,7 @@ namespace sepia {
         std::string _value;
     };
 
-    /// enum_parameter is a specialised parameter for string values with a given set of possible values.
+    /// enum_parameter is a specialized parameter for string values with a given set of possible values.
     class enum_parameter : public string_parameter {
         public:
         enum_parameter(const std::string& value, const std::unordered_set<std::string>& available_values) :
@@ -2122,31 +2237,14 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<enum_parameter>(_value, _available_values);
         }
-        virtual std::string::const_iterator
-        load(std::string::const_iterator begin, std::string::const_iterator file_end, uint32_t& line) override {
-            begin = trim(begin, file_end, line);
-            if (*begin != '"') {
-                throw parse_error("the string does not start with quotes", line);
-            }
-            ++begin;
-            auto end = begin;
-            for (; *end != '"'; ++end) {
-                if (end == file_end) {
-                    throw parse_error("unexpected end of file", line);
-                }
-
-                if (*end == '\n') {
-                    throw parse_error("strings cannot contain linebreaks", line);
-                }
-            }
-            _value = std::string(begin, end);
+        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+            trim(json_stream, character_count, line_count);
+            _value = string(json_stream, character_count, line_count);
             try {
                 validate();
             } catch (const parameter_error& exception) {
-                throw parse_error(exception.what(), line);
+                throw parse_error(exception.what(), character_count, line_count);
             }
-            ++end;
-            return trim(end, file_end, line);
         }
         virtual void load(const parameter& parameter) override {
             try {
@@ -2176,25 +2274,15 @@ namespace sepia {
         std::unordered_set<std::string> _available_values;
     };
 
-    /// unvalidated_parameter represents either a parameter subset or a JSON filename to be validated against a complete
-    /// parameter. It mimics a union behavior with poor memory management. However, the lifecycles of its attributes are
-    /// properly managed. The class handles file reading when constructed with a JSON filename.
+    /// unvalidated_parameter represents either a parameter subset or a JSON stream to be validated.
+    /// It mimics a union behavior, with properly managed attributes' lifecycles.
     class unvalidated_parameter {
         public:
-        unvalidated_parameter(const std::string& json_filename) : _is_string(true) {
-            if (json_filename != "") {
-                std::ifstream file(json_filename);
-                if (!file.good()) {
-                    throw unreadable_file(json_filename);
-                }
-                file.seekg(0, std::fstream::end);
-                _json_data.reserve(std::size_t(file.tellg()));
-                file.seekg(0, std::fstream::beg);
-                _json_data.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-            }
-        }
+        unvalidated_parameter(std::unique_ptr<std::istream> json_stream) :
+            _is_json_stream(true),
+            _json_stream(std::move(json_stream)) {}
         unvalidated_parameter(std::unique_ptr<parameter> parameter) :
-            _is_string(false),
+            _is_json_stream(false),
             _parameter(std::move(parameter)) {}
         unvalidated_parameter(const unvalidated_parameter&) = delete;
         unvalidated_parameter(unvalidated_parameter&&) = default;
@@ -2202,40 +2290,40 @@ namespace sepia {
         unvalidated_parameter& operator=(unvalidated_parameter&&) = default;
         virtual ~unvalidated_parameter() {}
 
-        /// is_string returns true if the object was constructed as a string.
-        virtual bool is_string() const {
-            return _is_string;
+        /// is_json_stream returns true if the object was constructed as a stream.
+        virtual bool is_json_stream() const {
+            return _is_json_stream;
         }
 
-        /// to_json_data returns the json data inside the given filename.
+        /// to_json_stream returns the provided json_stream.
         /// An error is thrown if the object was constructed with a parameter.
-        virtual const std::string& to_json_data() const {
-            if (!_is_string) {
+        virtual std::istream& to_json_stream() {
+            if (!_is_json_stream) {
                 throw parameter_error("The unvalidated parameter is not a string");
             }
-            return _json_data;
+            return *_json_stream;
         }
 
         /// to_parameter returns the provided parameter.
-        /// An error is thrown if the object was constructed with a string.
+        /// An error is thrown if the object was constructed with a stream.
         virtual const parameter& to_parameter() const {
-            if (_is_string) {
+            if (_is_json_stream) {
                 throw parameter_error("The unvalidated parameter is not a parameter");
             }
             return *_parameter;
         }
 
         protected:
-        bool _is_string;
-        std::string _json_data;
+        bool _is_json_stream;
+        std::unique_ptr<std::istream> _json_stream;
         std::unique_ptr<parameter> _parameter;
     };
 
-    /// specialised_camera represents a template-specialised generic event-based camera.
+    /// specialized_camera represents a template-specialized generic event-based camera.
     template <typename Event, typename HandleEvent, typename HandleException>
-    class specialised_camera {
+    class specialized_camera {
         public:
-        specialised_camera(
+        specialized_camera(
             HandleEvent handle_event,
             HandleException handle_exception,
             std::size_t fifo_size,
@@ -2265,11 +2353,11 @@ namespace sepia {
                 }
             });
         }
-        specialised_camera(const specialised_camera&) = delete;
-        specialised_camera(specialised_camera&&) = default;
-        specialised_camera& operator=(const specialised_camera&) = delete;
-        specialised_camera& operator=(specialised_camera&&) = default;
-        virtual ~specialised_camera() {
+        specialized_camera(const specialized_camera&) = delete;
+        specialized_camera(specialized_camera&&) = default;
+        specialized_camera& operator=(const specialized_camera&) = delete;
+        specialized_camera& operator=(specialized_camera&&) = default;
+        virtual ~specialized_camera() {
             _buffer_running.store(false, std::memory_order_relaxed);
             _buffer_loop.join();
         }
