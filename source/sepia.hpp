@@ -232,6 +232,35 @@ namespace sepia {
         return stream;
     }
 
+    /// dirname returns the directory part of the given path.
+    inline std::string dirname(const std::string& path) {
+        for (std::size_t index = path.size();;) {
+            index = path.find_last_of('/', index);
+            if (index == std::string::npos) {
+                return ".";
+            }
+            if (index == 0 || path[index - 1] != '\\') {
+                return path.substr(0, index);
+            }
+        }
+    }
+
+    /// join concatenates several path components.
+    template <typename Iterator>
+    std::string join(Iterator begin, Iterator end) {
+        std::string path;
+        for (; begin != end; ++begin) {
+            path += *begin;
+            if (!path.empty() && begin != std::prev(end) && path.back() != '/') {
+                path.push_back('/');
+            }
+        }
+        return path;
+    }
+    std::string join(std::initializer_list<std::string> components) {
+        return join(components.begin(), components.end());
+    }
+
     /// header bundles the parameters composing the stream's header.
     struct header {
         std::array<uint8_t, 3> event_stream_version;
