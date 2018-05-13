@@ -30,8 +30,8 @@ namespace sepia {
         return "Event Stream";
     }
 
-    /// event_stream_type associates an Event Stream type name with its byte.
-    enum class event_stream_type : uint8_t {
+    /// type associates an Event Stream type name with its byte.
+    enum class type : uint8_t {
         generic = 0,
         dvs = 1,
         atis = 2,
@@ -49,17 +49,24 @@ namespace sepia {
         return false;
     }
 
-    /// generic_event represents the parameters of a generic event.
-    struct generic_event {
+    /// event represents the parameters of an observable event.
+    template <type event_stream_type>
+    struct event;
+
+    /// event<type::generic> represents the parameters of a generic event.
+    template <>
+    struct event<type::generic> {
         /// t represents the event's timestamp.
         uint64_t t;
 
         /// bytes stores the data payload associated with the event.
         std::vector<uint8_t> bytes;
     };
+    using generic_event = event<type::generic>;
 
     /// dvs_event represents the parameters of a change detection.
-    struct dvs_event {
+    template <>
+    struct event<type::dvs> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -74,9 +81,11 @@ namespace sepia {
         /// is_increase is false if the light is decreasing.
         bool is_increase;
     } __attribute__((packed));
+    using dvs_event = event<type::dvs>;
 
     /// atis_event represents the parameters of a change detection or an exposure measurement.
-    struct atis_event {
+    template <>
+    struct event<type::atis> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -95,26 +104,11 @@ namespace sepia {
         /// exposure measurement: polarity is false for a first threshold crossing.
         bool polarity;
     } __attribute__((packed));
-
-    /// threshold_crossing represent the parameters of a threshold crossing.
-    struct threshold_crossing {
-        /// t represents the event's timestamp.
-        uint64_t t;
-
-        /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
-        /// x is 0 on the left, and increases from left to right.
-        uint16_t x;
-
-        /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
-        /// y is 0 on the bottom, and increases from bottom to top.
-        uint16_t y;
-
-        /// is_second is false if the event is a first threshold crossing.
-        bool is_second;
-    } __attribute__((packed));
+    using atis_event = event<type::atis>;
 
     /// color_event represents the parameters of a color event.
-    struct color_event {
+    template <>
+    struct event<type::color> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -135,6 +129,24 @@ namespace sepia {
         /// b represents the blue component of the color.
         uint8_t b;
     } __attribute__((packed));
+    using color_event = event<type::color>;
+
+    /// threshold_crossing represent the parameters of a threshold crossing.
+    struct threshold_crossing {
+        /// t represents the event's timestamp.
+        uint64_t t;
+
+        /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
+        /// x is 0 on the left, and increases from left to right.
+        uint16_t x;
+
+        /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
+        /// y is 0 on the bottom, and increases from bottom to top.
+        uint16_t y;
+
+        /// is_second is false if the event is a first threshold crossing.
+        bool is_second;
+    } __attribute__((packed));
 
     /// unreadable_file is thrown when an input file does not exist or is not readable.
     class unreadable_file : public std::runtime_error {
@@ -147,50 +159,50 @@ namespace sepia {
     class unwritable_file : public std::runtime_error {
         public:
         unwritable_file(const std::string& filename) :
-            std::runtime_error("The file '" + filename + "'' could not be open for writing") {}
+            std::runtime_error("the file '" + filename + "'' could not be open for writing") {}
     };
 
     /// wrong_signature is thrown when an input file does not have the expected signature.
     class wrong_signature : public std::runtime_error {
         public:
-        wrong_signature() : std::runtime_error("The stream does not have the expected signature") {}
+        wrong_signature() : std::runtime_error("the stream does not have the expected signature") {}
     };
 
     /// unsupported_version is thrown when an Event Stream file uses an unsupported version.
     class unsupported_version : public std::runtime_error {
         public:
-        unsupported_version() : std::runtime_error("The stream uses an unsupported version") {}
+        unsupported_version() : std::runtime_error("the stream uses an unsupported version") {}
     };
 
     /// incomplete_header is thrown when the end of file is reached while reading the header.
     class incomplete_header : public std::runtime_error {
         public:
-        incomplete_header() : std::runtime_error("The stream has an incomplete header") {}
+        incomplete_header() : std::runtime_error("the stream has an incomplete header") {}
     };
 
     /// unsupported_event_type is thrown when an Event Stream file uses an unsupported event type.
     class unsupported_event_type : public std::runtime_error {
         public:
-        unsupported_event_type() : std::runtime_error("The stream uses an unsupported event type") {}
+        unsupported_event_type() : std::runtime_error("the stream uses an unsupported event type") {}
     };
 
     /// coordinates_overflow is thrown when an event has coordinates outside the range provided by the header.
     class coordinates_overflow : public std::runtime_error {
         public:
-        coordinates_overflow() : std::runtime_error("An event has coordinates outside the header-provided range") {}
+        coordinates_overflow() : std::runtime_error("an event has coordinates outside the header-provided range") {}
     };
 
     /// end_of_file is thrown when the end of an input file is reached.
     class end_of_file : public std::runtime_error {
         public:
-        end_of_file() : std::runtime_error("End of file reached") {}
+        end_of_file() : std::runtime_error("end of file reached") {}
     };
 
     /// no_device_connected is thrown when device auto-select is called without devices connected.
     class no_device_connected : public std::runtime_error {
         public:
         no_device_connected(const std::string& device_family) :
-            std::runtime_error("No " + device_family + " is connected") {}
+            std::runtime_error("no " + device_family + " is connected") {}
     };
 
     /// device_disconnected is thrown when an active device is disonnected.
@@ -261,10 +273,10 @@ namespace sepia {
         return join(components.begin(), components.end());
     }
 
-    /// header bundles the parameters composing the stream's header.
+    /// header bundles an event stream's header parameters.
     struct header {
-        std::array<uint8_t, 3> event_stream_version;
-        event_stream_type event_stream_type;
+        std::array<uint8_t, 3> version;
+        type type;
         uint16_t width;
         uint16_t height;
     };
@@ -280,13 +292,12 @@ namespace sepia {
         }
         header header = {};
         {
-            event_stream.read(
-                reinterpret_cast<char*>(header.event_stream_version.data()), header.event_stream_version.size());
+            event_stream.read(reinterpret_cast<char*>(header.version.data()), header.version.size());
             if (event_stream.eof()) {
                 throw incomplete_header();
             }
-            if (std::get<0>(header.event_stream_version) != std::get<0>(event_stream_version())
-                || std::get<1>(header.event_stream_version) < std::get<1>(event_stream_version())) {
+            if (std::get<0>(header.version) != std::get<0>(event_stream_version())
+                || std::get<1>(header.version) < std::get<1>(event_stream_version())) {
                 throw unsupported_version();
             }
         }
@@ -296,19 +307,19 @@ namespace sepia {
                 throw incomplete_header();
             }
             const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
-            if (type_byte == static_cast<uint8_t>(event_stream_type::generic)) {
-                header.event_stream_type = event_stream_type::generic;
-            } else if (type_byte == static_cast<uint8_t>(event_stream_type::dvs)) {
-                header.event_stream_type = event_stream_type::dvs;
-            } else if (type_byte == static_cast<uint8_t>(event_stream_type::atis)) {
-                header.event_stream_type = event_stream_type::atis;
-            } else if (type_byte == static_cast<uint8_t>(event_stream_type::color)) {
-                header.event_stream_type = event_stream_type::color;
+            if (type_byte == static_cast<uint8_t>(type::generic)) {
+                header.type = type::generic;
+            } else if (type_byte == static_cast<uint8_t>(type::dvs)) {
+                header.type = type::dvs;
+            } else if (type_byte == static_cast<uint8_t>(type::atis)) {
+                header.type = type::atis;
+            } else if (type_byte == static_cast<uint8_t>(type::color)) {
+                header.type = type::color;
             } else {
                 throw unsupported_event_type();
             }
         }
-        if (header.event_stream_type != event_stream_type::generic) {
+        if (header.type != type::generic) {
             std::array<uint8_t, 4> size_bytes;
             event_stream.read(reinterpret_cast<char*>(size_bytes.data()), size_bytes.size());
             if (event_stream.eof()) {
@@ -329,19 +340,24 @@ namespace sepia {
         return read_header(*event_stream);
     }
 
-    /// write_header writes the header bytes to an byte stream.
-    inline void
-    write_header(std::ostream& event_stream, event_stream_type event_stream_type, uint16_t width, uint16_t height) {
-        event_stream.write("Event Stream", 12);
+    /// write_header writes the header bytes to a byte stream.
+    template <type event_stream_type, typename = typename std::enable_if<event_stream_type != type::generic>>
+    void write_header(std::ostream& event_stream, uint16_t width, uint16_t height) {
+        event_stream.write(event_stream_signature().data(), event_stream_signature().size());
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
         auto type_byte = static_cast<uint8_t>(event_stream_type);
         event_stream.put(*reinterpret_cast<char*>(&type_byte));
-        if (event_stream_type != event_stream_type::generic) {
-            event_stream.put(width & 0b11111111);
-            event_stream.put((width & 0b1111111100000000) >> 8);
-            event_stream.put(height & 0b11111111);
-            event_stream.put((height & 0b1111111100000000) >> 8);
-        }
+        event_stream.put(width & 0b11111111);
+        event_stream.put((width & 0b1111111100000000) >> 8);
+        event_stream.put(height & 0b11111111);
+        event_stream.put((height & 0b1111111100000000) >> 8);
+    }
+    template <type event_stream_type, typename = typename std::enable_if<event_stream_type == type::generic>>
+    void write_header(std::ostream& event_stream) {
+        event_stream.write(event_stream_signature().data(), event_stream_signature().size());
+        event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
+        auto type_byte = static_cast<uint8_t>(event_stream_type);
+        event_stream.put(*reinterpret_cast<char*>(&type_byte));
     }
 
     /// split separates a stream of ATIS events into a stream of DVS events and a stream of theshold crossings.
@@ -381,319 +397,20 @@ namespace sepia {
             std::forward<HandleThresholdCrossing>(handle_threshold_crossing));
     }
 
-    /// event_stream_observable is a base class for event stream observables.
-    class event_stream_observable {
+    /// handle_byte implements an event stream state machine.
+    template <type event_stream_type>
+    class handle_byte;
+
+    /// handle_byte<type::generic> implements the event stream state machine for generic events.
+    template <>
+    class handle_byte<type::generic> {
         public:
-        /// dispatch specifies when the events are dispatched.
-        enum class dispatch {
-            synchronously_but_skip_offset,
-            synchronously,
-            as_fast_as_possible,
-        };
-
-        event_stream_observable() {}
-        event_stream_observable(const event_stream_observable&) = delete;
-        event_stream_observable(event_stream_observable&&) = default;
-        event_stream_observable& operator=(const event_stream_observable&) = delete;
-        event_stream_observable& operator=(event_stream_observable&&) = default;
-        virtual ~event_stream_observable() {}
-
-        protected:
-        /// read_and_dispatch implements a generic dispatch mechanism for event stream files.
-        template <
-            typename Event,
-            typename HandleByte,
-            typename MustRestart,
-            typename HandleEvent,
-            typename HandleException>
-        static void read_and_dispatch(
-            std::istream& event_stream,
-            std::atomic_bool& running,
-            event_stream_observable::dispatch dispatch,
-            std::size_t chunk_size,
-            HandleByte handle_byte,
-            MustRestart must_restart,
-            HandleEvent handle_event,
-            HandleException handle_exception) {
-            try {
-                Event event = {};
-                std::vector<uint8_t> bytes(chunk_size);
-                switch (dispatch) {
-                    case event_stream_observable::dispatch::synchronously_but_skip_offset: {
-                        auto offset_skipped = false;
-                        auto time_reference = std::chrono::system_clock::now();
-                        uint64_t initial_t = 0;
-                        uint64_t previous_t = 0;
-                        while (running.load(std::memory_order_relaxed)) {
-                            event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-                            if (event_stream.eof()) {
-                                for (auto byte_iterator = bytes.begin();
-                                     byte_iterator != std::next(bytes.begin(), event_stream.gcount());
-                                     ++byte_iterator) {
-                                    if (handle_byte(*byte_iterator, event)) {
-                                        if (offset_skipped) {
-                                            if (event.t > previous_t) {
-                                                previous_t = event.t;
-                                                std::this_thread::sleep_until(
-                                                    time_reference + std::chrono::microseconds(event.t - initial_t));
-                                            }
-                                        } else {
-                                            offset_skipped = true;
-                                            initial_t = event.t;
-                                            previous_t = event.t;
-                                        }
-                                        handle_event(event);
-                                    }
-                                }
-                                if (must_restart()) {
-                                    event_stream.clear();
-                                    event_stream.seekg(
-                                        event_stream_signature().size() + event_stream_version().size() + 1);
-                                    offset_skipped = false;
-                                    handle_byte.reset();
-                                    event = Event{};
-                                    time_reference = std::chrono::system_clock::now();
-                                    continue;
-                                }
-                                throw end_of_file();
-                            }
-                            for (auto byte : bytes) {
-                                if (handle_byte(byte, event)) {
-                                    if (offset_skipped) {
-                                        if (event.t > previous_t) {
-                                            previous_t = event.t;
-                                            std::this_thread::sleep_until(
-                                                time_reference + std::chrono::microseconds(event.t - initial_t));
-                                        }
-                                    } else {
-                                        offset_skipped = true;
-                                        initial_t = event.t;
-                                        previous_t = event.t;
-                                    }
-                                    handle_event(event);
-                                }
-                            }
-                        }
-                    }
-                    case event_stream_observable::dispatch::synchronously: {
-                        auto time_reference = std::chrono::system_clock::now();
-                        uint64_t previous_t = 0;
-                        while (running.load(std::memory_order_relaxed)) {
-                            event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-                            if (event_stream.eof()) {
-                                for (auto byte_iterator = bytes.begin();
-                                     byte_iterator != std::next(bytes.begin(), event_stream.gcount());
-                                     ++byte_iterator) {
-                                    if (handle_byte(*byte_iterator, event)) {
-                                        if (event.t > previous_t) {
-                                            std::this_thread::sleep_until(
-                                                time_reference + std::chrono::microseconds(event.t));
-                                        }
-                                        previous_t = event.t;
-                                        handle_event(event);
-                                    }
-                                }
-                                if (must_restart()) {
-                                    event_stream.clear();
-                                    event_stream.seekg(
-                                        event_stream_signature().size() + event_stream_version().size() + 1);
-                                    handle_byte.reset();
-                                    event = Event{};
-                                    time_reference = std::chrono::system_clock::now();
-                                    continue;
-                                }
-                                throw end_of_file();
-                            }
-                            for (auto byte : bytes) {
-                                if (handle_byte(byte, event)) {
-                                    if (event.t > previous_t) {
-                                        std::this_thread::sleep_until(
-                                            time_reference + std::chrono::microseconds(event.t));
-                                    }
-                                    previous_t = event.t;
-                                    handle_event(event);
-                                }
-                            }
-                        }
-                    }
-                    case event_stream_observable::dispatch::as_fast_as_possible: {
-                        while (running.load(std::memory_order_relaxed)) {
-                            event_stream.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-                            if (event_stream.eof()) {
-                                for (auto byte_iterator = bytes.begin();
-                                     byte_iterator != std::next(bytes.begin(), event_stream.gcount());
-                                     ++byte_iterator) {
-                                    if (handle_byte(*byte_iterator, event)) {
-                                        handle_event(event);
-                                    }
-                                }
-                                if (must_restart()) {
-                                    event_stream.clear();
-                                    event_stream.seekg(
-                                        event_stream_signature().size() + event_stream_version().size() + 1);
-                                    handle_byte.reset();
-                                    event = Event{};
-                                    continue;
-                                }
-                                throw end_of_file();
-                            }
-                            for (auto byte : bytes) {
-                                if (handle_byte(byte, event)) {
-                                    handle_event(event);
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (...) {
-                handle_exception(std::current_exception());
-            }
-        }
-    };
-
-    /// capture_exception stores an exception pointer and notifies a condition variable.
-    /// It is used internally by join_ functions.
-    class capture_exception {
-        public:
-        capture_exception() {}
-        capture_exception(const capture_exception&) = delete;
-        capture_exception(capture_exception&&) = default;
-        capture_exception& operator=(const capture_exception&) = delete;
-        capture_exception& operator=(capture_exception&&) = default;
-        virtual ~capture_exception() {}
-
-        /// operator() handles an exception.
-        virtual void operator()(std::exception_ptr exception) {
-            {
-                std::unique_lock<std::mutex> lock(_mutex);
-                _exception = exception;
-            }
-            _condition_variable.notify_one();
-        }
-
-        /// wait blocks until the held exception is set.
-        virtual void wait() {
-            std::unique_lock<std::mutex> exception_lock(_mutex);
-            if (_exception == nullptr) {
-                _condition_variable.wait(exception_lock, [&] { return _exception != nullptr; });
-            }
-        }
-
-        /// rethrow_unless raises the internally held exception unless it matches one of the given types.
-        template <typename... Exceptions>
-        void rethrow_unless() {
-            catch_index<0, Exceptions...>();
-        }
-
-        protected:
-        /// catch_index catches the n-th exception type.
-        template <std::size_t index, typename... Exceptions>
-            typename std::enable_if < index<sizeof...(Exceptions), void>::type catch_index() {
-            using Exception = typename std::tuple_element<index, std::tuple<Exceptions...>>::type;
-            try {
-                catch_index<index + 1, Exceptions...>();
-            } catch (const Exception&) {
-                return;
-            }
-        }
-
-        /// catch_index is a termination for the template loop.
-        template <std::size_t index, typename... Exceptions>
-        typename std::enable_if<index == sizeof...(Exceptions), void>::type catch_index() {
-            std::rethrow_exception(_exception);
-        }
-
-        std::mutex _mutex;
-        std::condition_variable _condition_variable;
-        std::exception_ptr _exception;
-    };
-
-    /// generic_event_stream_writer writes events to a generic Event Stream file.
-    class generic_event_stream_writer {
-        public:
-        generic_event_stream_writer() : _previous_t(0) {
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-        generic_event_stream_writer(const generic_event_stream_writer&) = delete;
-        generic_event_stream_writer(generic_event_stream_writer&&) = default;
-        generic_event_stream_writer& operator=(const generic_event_stream_writer&) = delete;
-        generic_event_stream_writer& operator=(generic_event_stream_writer&&) = default;
-        virtual ~generic_event_stream_writer() {}
-
-        /// operator() handles an event.
-        virtual void operator()(generic_event generic_event) {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_event_stream) {
-                auto relative_t = generic_event.t - _previous_t;
-                if (relative_t >= 0b11111110) {
-                    const auto number_of_overflows = relative_t / 0b11111110;
-                    for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                        _event_stream->put(0b11111111);
-                    }
-                    relative_t -= number_of_overflows * 0b11111110;
-                }
-                _event_stream->put(relative_t);
-                for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
-                    _event_stream->put(((size & 0b1111111) << 1) | ((size >> 7) == 0 ? 0 : 1));
-                }
-                _event_stream->write(
-                    reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
-                _previous_t = generic_event.t;
-            }
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// open is a thread-safe method to start logging events to the given stream.
-        virtual void open(std::unique_ptr<std::ostream> event_stream) {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_event_stream) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Already logging");
-            }
-            _event_stream = std::move(event_stream);
-            write_header(*_event_stream, event_stream_type::generic, 0, 0);
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// target is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename) {
-            auto event_stream = make_unique<std::ofstream>(filename);
-            if (!event_stream->good()) {
-                throw unwritable_file(filename);
-            }
-            open(std::move(event_stream));
-        }
-
-        /// close is a thread-safe method to stop logging the events and close the file.
-        virtual void close() {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (!_event_stream) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Was not logging");
-            }
-            _event_stream.reset();
-            _previous_t = 0;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        protected:
-        std::unique_ptr<std::ostream> _event_stream;
-        std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_t;
-    };
-
-    /// handle_generic_byte implements the event stream state machine for generic events.
-    class handle_generic_byte {
-        public:
-        handle_generic_byte() : _state(state::idle), _index(0), _bytes_size(0) {}
-        handle_generic_byte(const handle_generic_byte&) = default;
-        handle_generic_byte(handle_generic_byte&&) = default;
-        handle_generic_byte& operator=(const handle_generic_byte&) = default;
-        handle_generic_byte& operator=(handle_generic_byte&&) = default;
-        virtual ~handle_generic_byte() {}
+        handle_byte<type::generic>() : _state(state::idle), _index(0), _bytes_size(0) {}
+        handle_byte<type::generic>(const handle_byte<type::generic>&) = default;
+        handle_byte<type::generic>(handle_byte<type::generic>&&) = default;
+        handle_byte<type::generic>& operator=(const handle_byte<type::generic>&) = default;
+        handle_byte<type::generic>& operator=(handle_byte<type::generic>&&) = default;
+        virtual ~handle_byte<type::generic>() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, generic_event& generic_event) {
@@ -752,178 +469,25 @@ namespace sepia {
         std::size_t _bytes_size;
     };
 
-    /// generic_event_stream_observable is a template-specialized event_stream_observable for generic events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class generic_event_stream_observable : public event_stream_observable {
+    /// handle_byte<type::dvs> implements the event stream state machine for DVS events.
+    template <>
+    class handle_byte<type::dvs> {
         public:
-        generic_event_stream_observable(
-            std::unique_ptr<std::istream> event_stream,
-            HandleEvent handle_event,
-            HandleException handle_exception,
-            MustRestart must_restart,
-            event_stream_observable::dispatch dispatch,
-            std::size_t chunk_size) :
-            _event_stream(std::move(event_stream)),
-            _running(true) {
-            const auto header = read_header(*_event_stream);
-            if (header.event_stream_type != event_stream_type::generic) {
-                throw unsupported_event_type();
-            }
-            _loop = std::thread(
-                read_and_dispatch<generic_event, handle_generic_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(*_event_stream),
-                std::ref(_running),
-                dispatch,
-                chunk_size,
-                handle_generic_byte(),
-                std::forward<MustRestart>(must_restart),
-                std::forward<HandleEvent>(handle_event),
-                std::forward<HandleException>(handle_exception));
-        }
-        generic_event_stream_observable(const generic_event_stream_observable&) = delete;
-        generic_event_stream_observable(generic_event_stream_observable&&) = default;
-        generic_event_stream_observable& operator=(const generic_event_stream_observable&) = delete;
-        generic_event_stream_observable& operator=(generic_event_stream_observable&&) = default;
-        virtual ~generic_event_stream_observable() {
-            _running.store(false, std::memory_order_relaxed);
-            _loop.join();
-        }
-
-        protected:
-        std::unique_ptr<std::istream> _event_stream;
-        std::atomic_bool _running;
-        std::thread _loop;
-    };
-
-    /// make_generic_event_stream_observable creates an event stream observable from functors.
-    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
-    std::unique_ptr<generic_event_stream_observable<HandleEvent, HandleException, MustRestart>>
-    make_generic_event_stream_observable(
-        const std::string& filename,
-        HandleEvent handle_event,
-        HandleException handle_exception,
-        MustRestart must_restart = &false_function,
-        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
-        std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<generic_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
-            filename,
-            std::forward<HandleEvent>(handle_event),
-            std::forward<HandleException>(handle_exception),
-            std::forward<MustRestart>(must_restart),
-            dispatch,
-            chunk_size);
-    }
-
-    /// join_generic_event_stream_observable creates an event stream observable from functors and blocks until the end
-    /// of the input file is reached.
-    template <typename HandleEvent>
-    void join_generic_event_stream_observable(
-        const std::string& filename,
-        HandleEvent handle_event,
-        std::size_t chunk_size = 1 << 10) {
-        capture_exception capture_observable_exception;
-        auto generic_event_stream_observable = make_generic_event_stream_observable(
-            filename,
-            std::forward<HandleEvent>(handle_event),
-            std::ref(capture_observable_exception),
-            &false_function,
-            event_stream_observable::dispatch::as_fast_as_possible,
-            chunk_size);
-        capture_observable_exception.wait();
-        capture_observable_exception.rethrow_unless<end_of_file>();
-    }
-
-    /// dvs_event_stream_writer writes events to an Event Stream file.
-    class dvs_event_stream_writer {
-        public:
-        dvs_event_stream_writer() : _logging(false), _previous_t(0) {
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-        dvs_event_stream_writer(const dvs_event_stream_writer&) = delete;
-        dvs_event_stream_writer(dvs_event_stream_writer&&) = default;
-        dvs_event_stream_writer& operator=(const dvs_event_stream_writer&) = delete;
-        dvs_event_stream_writer& operator=(dvs_event_stream_writer&&) = default;
-        virtual ~dvs_event_stream_writer() {}
-
-        /// operator() handles an event.
-        virtual void operator()(dvs_event dvs_event) {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_logging) {
-                auto relative_t = dvs_event.t - _previous_t;
-                if (relative_t >= 0b1111111) {
-                    const auto number_of_overflows = relative_t / 0b1111111;
-                    for (std::size_t index = 0; index < number_of_overflows / 0b1111111; ++index) {
-                        _event_stream.put(0b11111111);
-                    }
-                    relative_t -= number_of_overflows * 0b1111111;
-                }
-                _event_stream.put((relative_t << 1) | (dvs_event.is_increase ? 1 : 0));
-                _event_stream.put(dvs_event.x & 0b11111111);
-                _event_stream.put((dvs_event.x & 0b1111111100000000) >> 8);
-                _event_stream.put(dvs_event.y & 0b11111111);
-                _event_stream.put((dvs_event.y & 0b1111111100000000) >> 8);
-                _previous_t = dvs_event.t;
-            }
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename, uint16_t width, uint16_t height) {
-            _event_stream.open(filename, std::ifstream::binary);
-            if (!_event_stream.good()) {
-                throw unwritable_file(filename);
-            }
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_logging) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Already logging");
-            }
-            write_header(_event_stream, event_stream_type::dvs, width, height);
-            _logging = true;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// close is a thread-safe method to stop logging the events and close the file.
-        virtual void close() {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (!_logging) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Was not logging");
-            }
-            _logging = false;
-            _event_stream.close();
-            _previous_t = 0;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        protected:
-        std::ofstream _event_stream;
-        bool _logging;
-        std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_t;
-    };
-
-    /// handle_dvs_byte implements the event stream state machine for DVS events.
-    class handle_dvs_byte {
-        public:
-        handle_dvs_byte() : _state(state::idle) {}
-        handle_dvs_byte(const handle_dvs_byte&) = default;
-        handle_dvs_byte(handle_dvs_byte&&) = default;
-        handle_dvs_byte& operator=(const handle_dvs_byte&) = default;
-        handle_dvs_byte& operator=(handle_dvs_byte&&) = default;
-        virtual ~handle_dvs_byte() {}
+        handle_byte<type::dvs>() : _state(state::idle) {}
+        handle_byte<type::dvs>(const handle_byte<type::dvs>&) = default;
+        handle_byte<type::dvs>(handle_byte<type::dvs>&&) = default;
+        handle_byte<type::dvs>& operator=(const handle_byte<type::dvs>&) = default;
+        handle_byte<type::dvs>& operator=(handle_byte<type::dvs>&&) = default;
+        virtual ~handle_byte<type::dvs>() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, dvs_event& dvs_event) {
             switch (_state) {
                 case state::idle: {
                     if (byte == 0b11111111) {
-                        dvs_event.t += 0b11111110;
+                        dvs_event.t += 0b1111111;
                     } else if (byte != 0b11111110) {
-                        dvs_event.t += ((byte & 0b1111111) >> 1);
+                        dvs_event.t += (byte >> 1);
                         dvs_event.is_increase = ((byte & 1) == 1);
                         _state = state::byte0;
                     }
@@ -970,185 +534,25 @@ namespace sepia {
         state _state;
     };
 
-    /// dvs_event_stream_observable is a template-specialized event_stream_observable for DVS events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class dvs_event_stream_observable : public event_stream_observable {
+    /// handle_byte<type::atis> implements the event stream state machine for ATIS events.
+    template <>
+    class handle_byte<type::atis> {
         public:
-        dvs_event_stream_observable(
-            std::unique_ptr<std::istream> event_stream,
-            HandleEvent handle_event,
-            HandleException handle_exception,
-            MustRestart must_restart,
-            event_stream_observable::dispatch dispatch,
-            std::size_t chunk_size) :
-            _event_stream(std::move(event_stream)),
-            _running(true) {
-            const auto header = read_header(*_event_stream);
-            if (header.event_stream_type != event_stream_type::dvs) {
-                throw unsupported_event_type();
-            }
-            _loop = std::thread(
-                read_and_dispatch<dvs_event, handle_dvs_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(*_event_stream),
-                std::ref(_running),
-                dispatch,
-                chunk_size,
-                handle_dvs_byte(),
-                std::forward<MustRestart>(must_restart),
-                std::forward<HandleEvent>(handle_event),
-                std::forward<HandleException>(handle_exception));
-        }
-        dvs_event_stream_observable(const dvs_event_stream_observable&) = delete;
-        dvs_event_stream_observable(dvs_event_stream_observable&&) = default;
-        dvs_event_stream_observable& operator=(const dvs_event_stream_observable&) = delete;
-        dvs_event_stream_observable& operator=(dvs_event_stream_observable&&) = default;
-        virtual ~dvs_event_stream_observable() {
-            _running.store(false, std::memory_order_relaxed);
-            _loop.join();
-        }
-
-        protected:
-        std::unique_ptr<std::istream> _event_stream;
-        std::atomic_bool _running;
-        std::thread _loop;
-    };
-
-    /// make_dvs_event_stream_observable creates an event stream observable from functors.
-    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
-    std::unique_ptr<dvs_event_stream_observable<HandleEvent, HandleException, MustRestart>>
-    make_dvs_event_stream_observable(
-        std::unique_ptr<std::istream> event_stream,
-        HandleEvent handle_event,
-        HandleException handle_exception,
-        MustRestart must_restart = &false_function,
-        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
-        std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<dvs_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
-            std::move(event_stream),
-            std::forward<HandleEvent>(handle_event),
-            std::forward<HandleException>(handle_exception),
-            std::forward<MustRestart>(must_restart),
-            dispatch,
-            chunk_size);
-    }
-
-    /// join_dvs_event_stream_observable creates an event stream observable from functors and blocks until the end of
-    /// the input file is reached.
-    template <typename HandleEvent>
-    void join_dvs_event_stream_observable(
-        std::unique_ptr<std::istream> event_stream,
-        HandleEvent handle_event,
-        std::size_t chunk_size = 1 << 10) {
-        capture_exception capture_observable_exception;
-        auto dvs_event_stream_observable = make_dvs_event_stream_observable(
-            std::move(event_stream),
-            std::forward<HandleEvent>(handle_event),
-            std::ref(capture_observable_exception),
-            &false_function,
-            event_stream_observable::dispatch::as_fast_as_possible,
-            chunk_size);
-        capture_observable_exception.wait();
-        capture_observable_exception.rethrow_unless<end_of_file>();
-    }
-
-    /// atis_event_stream_writer writes events to an Event Stream file.
-    class atis_event_stream_writer {
-        public:
-        atis_event_stream_writer() : _logging(false), _previous_t(0) {
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-        atis_event_stream_writer(const atis_event_stream_writer&) = delete;
-        atis_event_stream_writer(atis_event_stream_writer&&) = default;
-        atis_event_stream_writer& operator=(const atis_event_stream_writer&) = delete;
-        atis_event_stream_writer& operator=(atis_event_stream_writer&&) = default;
-        virtual ~atis_event_stream_writer() {}
-
-        /// operator() handles an event.
-        virtual void operator()(atis_event atis_event) {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_logging) {
-                auto relative_t = atis_event.t - _previous_t;
-                if (relative_t >= 0b111111) {
-                    const auto number_of_overflows = relative_t / 0b111111;
-                    for (std::size_t index = 0; index < number_of_overflows / 4; ++index) {
-                        _event_stream.put(0b11111111);
-                    }
-                    const auto number_of_overflows_left = number_of_overflows % 4;
-                    if (number_of_overflows_left > 0) {
-                        _event_stream.put(0b11111100 | number_of_overflows_left);
-                    }
-                    relative_t -= number_of_overflows * 0b111111;
-                }
-
-                _event_stream.put(
-                    (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00)
-                    | (atis_event.is_threshold_crossing ? 1 : 0));
-                _event_stream.put(atis_event.x & 0b11111111);
-                _event_stream.put((atis_event.x & 0b1111111100000000) >> 8);
-                _event_stream.put(atis_event.y & 0b11111111);
-                _event_stream.put((atis_event.y & 0b1111111100000000) >> 8);
-                _previous_t = atis_event.t;
-            }
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename, uint16_t width, uint16_t height) {
-            _event_stream.open(filename, std::ifstream::binary);
-            if (!_event_stream.good()) {
-                throw unwritable_file(filename);
-            }
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_logging) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Already logging");
-            }
-            write_header(_event_stream, event_stream_type::atis, width, height);
-            _logging = true;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// close is a thread-safe method to stop logging the events and close the file.
-        virtual void close() {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (!_logging) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Was not logging");
-            }
-            _logging = false;
-            _event_stream.close();
-            _previous_t = 0;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        protected:
-        std::ofstream _event_stream;
-        bool _logging;
-        std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_t;
-    };
-
-    /// handle_atis_byte implements the event stream state machine for ATIS events.
-    class handle_atis_byte {
-        public:
-        handle_atis_byte() : _state(state::idle) {}
-        handle_atis_byte(const handle_atis_byte&) = default;
-        handle_atis_byte(handle_atis_byte&&) = default;
-        handle_atis_byte& operator=(const handle_atis_byte&) = default;
-        handle_atis_byte& operator=(handle_atis_byte&&) = default;
-        virtual ~handle_atis_byte() {}
+        handle_byte<type::atis>() : _state(state::idle) {}
+        handle_byte<type::atis>(const handle_byte<type::atis>&) = default;
+        handle_byte<type::atis>(handle_byte<type::atis>&&) = default;
+        handle_byte<type::atis>& operator=(const handle_byte<type::atis>&) = default;
+        handle_byte<type::atis>& operator=(handle_byte<type::atis>&&) = default;
+        virtual ~handle_byte<type::atis>() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, atis_event& atis_event) {
             switch (_state) {
                 case state::idle: {
                     if ((byte & 0b11111100) == 0b11111100) {
-                        atis_event.t += 0b11111110 * (byte & 0b11);
+                        atis_event.t += 0b111111 * (byte & 0b11);
                     } else {
-                        atis_event.t += ((byte & 0b1111111) >> 1);
+                        atis_event.t += (byte >> 2);
                         atis_event.is_threshold_crossing = ((byte & 1) == 1);
                         atis_event.polarity = ((byte & 0b10) == 0b10);
                         _state = state::byte0;
@@ -1196,172 +600,16 @@ namespace sepia {
         state _state;
     };
 
-    /// atis_event_stream_observable is a template-specialized event_stream_observable for ATIS events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class atis_event_stream_observable : public event_stream_observable {
+    /// handle_byte<type::color> implements the event stream state machine for color events.
+    template <>
+    class handle_byte<type::color> {
         public:
-        atis_event_stream_observable(
-            std::unique_ptr<std::istream> event_stream,
-            HandleEvent handle_event,
-            HandleException handle_exception,
-            MustRestart must_restart,
-            event_stream_observable::dispatch dispatch,
-            std::size_t chunk_size) :
-            _event_stream(std::move(event_stream)),
-            _running(true) {
-            const auto header = read_header(*_event_stream);
-            if (header.event_stream_type != event_stream_type::atis) {
-                throw unsupported_event_type();
-            }
-            _loop = std::thread(
-                read_and_dispatch<atis_event, handle_atis_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(*_event_stream),
-                std::ref(_running),
-                dispatch,
-                chunk_size,
-                handle_atis_byte(),
-                std::forward<MustRestart>(must_restart),
-                std::forward<HandleEvent>(handle_event),
-                std::forward<HandleException>(handle_exception));
-        }
-        atis_event_stream_observable(const atis_event_stream_observable&) = delete;
-        atis_event_stream_observable(atis_event_stream_observable&&) = default;
-        atis_event_stream_observable& operator=(const atis_event_stream_observable&) = delete;
-        atis_event_stream_observable& operator=(atis_event_stream_observable&&) = default;
-        virtual ~atis_event_stream_observable() {
-            _running.store(false, std::memory_order_relaxed);
-            _loop.join();
-        }
-
-        protected:
-        std::unique_ptr<std::istream> _event_stream;
-        std::atomic_bool _running;
-        std::thread _loop;
-    };
-
-    /// make_atis_event_stream_observable creates an event stream observable from functors.
-    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
-    std::unique_ptr<atis_event_stream_observable<HandleEvent, HandleException, MustRestart>>
-    make_atis_event_stream_observable(
-        std::unique_ptr<std::istream> event_stream,
-        HandleEvent handle_event,
-        HandleException handle_exception,
-        MustRestart must_restart = &false_function,
-        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
-        std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<atis_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
-            std::move(event_stream),
-            std::forward<HandleEvent>(handle_event),
-            std::forward<HandleException>(handle_exception),
-            std::forward<MustRestart>(must_restart),
-            dispatch,
-            chunk_size);
-    }
-
-    /// join_atis_event_stream_observable creates an event stream observable from functors and blocks until the end of
-    /// the input file is reached.
-    template <typename HandleEvent>
-    void join_atis_event_stream_observable(
-        std::unique_ptr<std::istream> event_stream,
-        HandleEvent handle_event,
-        std::size_t chunk_size = 1 << 10) {
-        capture_exception capture_observable_exception;
-        auto atis_event_stream_observable = make_atis_event_stream_observable(
-            std::move(event_stream),
-            std::forward<HandleEvent>(handle_event),
-            std::ref(capture_observable_exception),
-            &false_function,
-            event_stream_observable::dispatch::as_fast_as_possible,
-            chunk_size);
-        capture_observable_exception.wait();
-        capture_observable_exception.rethrow_unless<end_of_file>();
-    }
-
-    /// color_event_stream_writer writes events to a color Event Stream file.
-    class color_event_stream_writer {
-        public:
-        color_event_stream_writer() : _logging(false), _previous_t(0) {
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-        color_event_stream_writer(const color_event_stream_writer&) = delete;
-        color_event_stream_writer(color_event_stream_writer&&) = default;
-        color_event_stream_writer& operator=(const color_event_stream_writer&) = delete;
-        color_event_stream_writer& operator=(color_event_stream_writer&&) = default;
-        virtual ~color_event_stream_writer() {}
-
-        /// operator() handles an event.
-        virtual void operator()(color_event color_event) {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_logging) {
-                auto relative_t = color_event.t - _previous_t;
-                if (relative_t >= 0b11111110) {
-                    const auto number_of_overflows = relative_t / 0b11111110;
-                    for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                        _event_stream.put(static_cast<uint8_t>(0b11111111));
-                    }
-                    relative_t -= number_of_overflows * 0b11111110;
-                }
-                _event_stream.put(relative_t);
-                _event_stream.put(color_event.x & 0b11111111);
-                _event_stream.put((color_event.x & 0b1111111100000000) >> 8);
-                _event_stream.put(color_event.y & 0b11111111);
-                _event_stream.put((color_event.y & 0b1111111100000000) >> 8);
-                _event_stream.put(color_event.r);
-                _event_stream.put(color_event.g);
-                _event_stream.put(color_event.b);
-                _previous_t = color_event.t;
-            }
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// open is a thread-safe method to start logging events to the given file.
-        virtual void open(const std::string& filename, uint16_t width, uint16_t height) {
-            _event_stream.open(filename, std::ifstream::binary);
-            if (!_event_stream.good()) {
-                throw unwritable_file(filename);
-            }
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (_logging) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Already logging");
-            }
-            write_header(_event_stream, event_stream_type::color, width, height);
-            _logging = true;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        /// close is a thread-safe method to stop logging the events and close the file.
-        virtual void close() {
-            while (_accessing_event_stream.test_and_set(std::memory_order_acquire)) {
-            }
-            if (!_logging) {
-                _accessing_event_stream.clear(std::memory_order_release);
-                throw std::runtime_error("Was not logging");
-            }
-            _logging = false;
-            _event_stream.close();
-            _previous_t = 0;
-            _accessing_event_stream.clear(std::memory_order_release);
-        }
-
-        protected:
-        std::ofstream _event_stream;
-        bool _logging;
-        std::atomic_flag _accessing_event_stream;
-        uint64_t _previous_t;
-    };
-
-    /// handle_color_byte implements the event stream state machine for color events.
-    class handle_color_byte {
-        public:
-        handle_color_byte() : _state(state::idle) {}
-        handle_color_byte(const handle_color_byte&) = default;
-        handle_color_byte(handle_color_byte&&) = default;
-        handle_color_byte& operator=(const handle_color_byte&) = default;
-        handle_color_byte& operator=(handle_color_byte&&) = default;
-        virtual ~handle_color_byte() {}
+        handle_byte<type::color>() : _state(state::idle) {}
+        handle_byte<type::color>(const handle_byte<type::color>&) = default;
+        handle_byte<type::color>(handle_byte<type::color>&&) = default;
+        handle_byte<type::color>& operator=(const handle_byte<type::color>&) = default;
+        handle_byte<type::color>& operator=(handle_byte<type::color>&&) = default;
+        virtual ~handle_byte<type::color>() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, color_event& color_event) {
@@ -1434,60 +682,415 @@ namespace sepia {
         state _state;
     };
 
-    /// color_event_stream_observable is a template-specialized event_stream_observable for color events.
-    template <typename HandleEvent, typename HandleException, typename MustRestart>
-    class color_event_stream_observable : public event_stream_observable {
+    /// write_to_reference converts and writes events to a non-owned byte stream.
+    template <type event_stream_type>
+    class write_to_reference;
+
+    /// write_to_reference<type::generic> converts and writes generic events to a non-owned byte stream.
+    template <>
+    class write_to_reference<type::generic> {
         public:
-        color_event_stream_observable(
+        write_to_reference<type::generic>(std::ostream& event_stream) :
+            _event_stream(event_stream),
+            _previous_t(0) {
+            write_header<type::generic>(_event_stream);
+        }
+        write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
+        write_to_reference<type::generic>(write_to_reference<type::generic>&&) = default;
+        write_to_reference<type::generic>& operator=(const write_to_reference<type::generic>&) = delete;
+        write_to_reference<type::generic>& operator=(write_to_reference<type::generic>&&) = default;
+        virtual ~write_to_reference<type::generic>() {}
+
+        /// operator() handles an event.
+        virtual void operator()(generic_event generic_event) {
+            auto relative_t = generic_event.t - _previous_t;
+            if (relative_t >= 0b11111110) {
+                const auto number_of_overflows = relative_t / 0b11111110;
+                for (std::size_t index = 0; index < number_of_overflows; ++index) {
+                    _event_stream.put(0b11111111);
+                }
+                relative_t -= number_of_overflows * 0b11111110;
+            }
+            _event_stream.put(relative_t);
+            for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
+                _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) == 0 ? 0 : 1));
+            }
+            _event_stream.write(reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
+        }
+
+        protected:
+        std::ostream& _event_stream;
+        uint64_t _previous_t;
+    };
+
+    /// write_to_reference<type::dvs> converts and writes DVS events to a non-owned byte stream.
+    template <>
+    class write_to_reference<type::dvs> {
+        public:
+        write_to_reference<type::dvs>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+            _event_stream(event_stream),
+            _previous_t(0) {
+            write_header<type::dvs>(_event_stream, width, height);
+        }
+        write_to_reference<type::dvs>(const write_to_reference<type::dvs>&) = delete;
+        write_to_reference<type::dvs>(write_to_reference<type::dvs>&&) = default;
+        write_to_reference<type::dvs>& operator=(const write_to_reference<type::dvs>&) = delete;
+        write_to_reference<type::dvs>& operator=(write_to_reference<type::dvs>&&) = default;
+        virtual ~write_to_reference<type::dvs>() {}
+
+        /// operator() handles an event.
+        virtual void operator()(dvs_event dvs_event) {
+            auto relative_t = dvs_event.t - _previous_t;
+            if (relative_t >= 0b1111111) {
+                const auto number_of_overflows = relative_t / 0b1111111;
+                for (std::size_t index = 0; index < number_of_overflows; ++index) {
+                    _event_stream.put(0b11111111);
+                }
+                relative_t -= number_of_overflows * 0b1111111;
+            }
+            _event_stream.put((relative_t << 1) | (dvs_event.is_increase ? 1 : 0));
+            _event_stream.put(dvs_event.x & 0b11111111);
+            _event_stream.put((dvs_event.x & 0b1111111100000000) >> 8);
+            _event_stream.put(dvs_event.y & 0b11111111);
+            _event_stream.put((dvs_event.y & 0b1111111100000000) >> 8);
+            _previous_t = dvs_event.t;
+        }
+
+        protected:
+        std::ostream& _event_stream;
+        uint64_t _previous_t;
+    };
+
+    /// write_to_reference<type::atis> converts and writes ATIS events to a non-owned byte stream.
+    template <>
+    class write_to_reference<type::atis> {
+        public:
+        write_to_reference<type::atis>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+            _event_stream(event_stream),
+            _previous_t(0) {
+            write_header<type::atis>(_event_stream, width, height);
+        }
+        write_to_reference<type::atis>(const write_to_reference<type::atis>&) = delete;
+        write_to_reference<type::atis>(write_to_reference<type::atis>&&) = default;
+        write_to_reference<type::atis>& operator=(const write_to_reference<type::atis>&) = delete;
+        write_to_reference<type::atis>& operator=(write_to_reference<type::atis>&&) = default;
+        virtual ~write_to_reference<type::atis>() {}
+
+        /// operator() handles an event.
+        virtual void operator()(atis_event atis_event) {
+            auto relative_t = atis_event.t - _previous_t;
+            if (relative_t >= 0b111111) {
+                const auto number_of_overflows = relative_t / 0b111111;
+                for (std::size_t index = 0; index < number_of_overflows / 0b11; ++index) {
+                    _event_stream.put(0b11111111);
+                }
+                const auto number_of_overflows_left = number_of_overflows % 0b11;
+                if (number_of_overflows_left > 0) {
+                    _event_stream.put(0b11111100 | number_of_overflows_left);
+                }
+                relative_t -= number_of_overflows * 0b111111;
+            }
+
+            _event_stream.put(
+                (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0));
+            _event_stream.put(atis_event.x & 0b11111111);
+            _event_stream.put((atis_event.x & 0b1111111100000000) >> 8);
+            _event_stream.put(atis_event.y & 0b11111111);
+            _event_stream.put((atis_event.y & 0b1111111100000000) >> 8);
+            _previous_t = atis_event.t;
+        }
+
+        protected:
+        std::ostream& _event_stream;
+        uint64_t _previous_t;
+    };
+
+    /// write_to_reference<type::color> converts and writes color events to a non-owned byte stream.
+    template <>
+    class write_to_reference<type::color> {
+        public:
+        write_to_reference<type::color>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+            _event_stream(event_stream),
+            _previous_t(0) {
+            write_header<type::color>(_event_stream, width, height);
+        }
+        write_to_reference<type::color>(const write_to_reference<type::color>&) = delete;
+        write_to_reference<type::color>(write_to_reference<type::color>&&) = default;
+        write_to_reference<type::color>& operator=(const write_to_reference<type::color>&) = delete;
+        write_to_reference<type::color>& operator=(write_to_reference<type::color>&&) = default;
+        virtual ~write_to_reference<type::color>() {}
+
+        /// operator() handles an event.
+        virtual void operator()(color_event color_event) {
+            auto relative_t = color_event.t - _previous_t;
+            if (relative_t >= 0b11111110) {
+                const auto number_of_overflows = relative_t / 0b11111110;
+                for (std::size_t index = 0; index < number_of_overflows; ++index) {
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
+                }
+                relative_t -= number_of_overflows * 0b11111110;
+            }
+            _event_stream.put(relative_t);
+            _event_stream.put(color_event.x & 0b11111111);
+            _event_stream.put((color_event.x & 0b1111111100000000) >> 8);
+            _event_stream.put(color_event.y & 0b11111111);
+            _event_stream.put((color_event.y & 0b1111111100000000) >> 8);
+            _event_stream.put(color_event.r);
+            _event_stream.put(color_event.g);
+            _event_stream.put(color_event.b);
+            _previous_t = color_event.t;
+        }
+
+        protected:
+        std::ostream& _event_stream;
+        uint64_t _previous_t;
+    };
+
+    /// write converts and writes events to a byte stream.
+    template <type event_stream_type>
+    class write {
+        public:
+        write(std::unique_ptr<std::ostream> event_stream, uint16_t width, uint16_t height) :
+            _event_stream(std::move(event_stream)),
+            _write_to_reference(*_event_stream, width, height) {}
+        write(const write&) = delete;
+        write(write&&) = default;
+        write& operator=(const write&) = delete;
+        write& operator=(write&&) = default;
+        virtual ~write() {}
+
+        /// operator() handles an event.
+        virtual void operator()(event<event_stream_type> event) {
+            _write_to_reference(event);
+        }
+
+        protected:
+        std::unique_ptr<std::ostream> _event_stream;
+        write_to_reference<event_stream_type> _write_to_reference;
+    };
+    template <>
+    class write<type::generic> {
+        public:
+        write<type::generic>(std::unique_ptr<std::ostream> event_stream) :
+            _event_stream(std::move(event_stream)),
+            _write_to_reference(*_event_stream) {}
+        write<type::generic>(const write<type::generic>&) = delete;
+        write<type::generic>(write<type::generic>&&) = default;
+        write<type::generic>& operator=(const write<type::generic>&) = delete;
+        write<type::generic>& operator=(write<type::generic>&&) = default;
+        virtual ~write<type::generic>() {}
+
+        /// operator() handles an event.
+        virtual void operator()(generic_event generic_event) {
+            _write_to_reference(generic_event);
+        }
+
+        protected:
+        std::unique_ptr<std::ostream> _event_stream;
+        write_to_reference<type::generic> _write_to_reference;
+    };
+
+    /// dispatch specifies when the events are dispatched by an observable.
+    enum class dispatch {
+        synchronously_but_skip_offset,
+        synchronously,
+        as_fast_as_possible,
+    };
+
+    /// observable reads bytes from a stream and dispatches events.
+    template <type event_stream_type, typename HandleEvent, typename HandleException, typename MustRestart>
+    class observable {
+        public:
+        observable(
             std::unique_ptr<std::istream> event_stream,
             HandleEvent handle_event,
             HandleException handle_exception,
             MustRestart must_restart,
-            event_stream_observable::dispatch dispatch,
+            dispatch dispatch,
             std::size_t chunk_size) :
             _event_stream(std::move(event_stream)),
+            _handle_event(std::forward<HandleEvent>(handle_event)),
+            _handle_exception(std::forward<HandleException>(handle_exception)),
+            _must_restart(std::forward<MustRestart>(must_restart)),
+            _dispatch(dispatch),
+            _chunk_size(chunk_size),
             _running(true) {
             const auto header = read_header(*_event_stream);
-            if (header.event_stream_type != event_stream_type::color) {
+            if (header.type != event_stream_type) {
                 throw unsupported_event_type();
             }
-            _loop = std::thread(
-                read_and_dispatch<color_event, handle_color_byte, MustRestart, HandleEvent, HandleException>,
-                std::ref(*_event_stream),
-                std::ref(_running),
-                dispatch,
-                chunk_size,
-                handle_color_byte(),
-                std::forward<MustRestart>(must_restart),
-                std::forward<HandleEvent>(handle_event),
-                std::forward<HandleException>(handle_exception));
+            _loop = std::thread([this]() {
+                try {
+                    event<event_stream_type> event = {};
+                    handle_byte<event_stream_type> handle_byte;
+                    std::vector<uint8_t> bytes(_chunk_size);
+                    switch (_dispatch) {
+                        case dispatch::synchronously_but_skip_offset: {
+                            auto offset_skipped = false;
+                            auto time_reference = std::chrono::system_clock::now();
+                            uint64_t initial_t = 0;
+                            uint64_t previous_t = 0;
+                            while (_running.load(std::memory_order_relaxed)) {
+                                _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                if (_event_stream->eof()) {
+                                    for (auto byte_iterator = bytes.begin();
+                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         ++byte_iterator) {
+                                        if (handle_byte(*byte_iterator, event)) {
+                                            if (offset_skipped) {
+                                                if (event.t > previous_t) {
+                                                    previous_t = event.t;
+                                                    std::this_thread::sleep_until(
+                                                        time_reference
+                                                        + std::chrono::microseconds(event.t - initial_t));
+                                                }
+                                            } else {
+                                                offset_skipped = true;
+                                                initial_t = event.t;
+                                                previous_t = event.t;
+                                            }
+                                            _handle_event(event);
+                                        }
+                                    }
+                                    if (_must_restart()) {
+                                        _event_stream->clear();
+                                        _event_stream->seekg(
+                                            event_stream_signature().size() + event_stream_version().size() + 1);
+                                        offset_skipped = false;
+                                        handle_byte.reset();
+                                        event = {};
+                                        time_reference = std::chrono::system_clock::now();
+                                        continue;
+                                    }
+                                    throw end_of_file();
+                                }
+                                for (auto byte : bytes) {
+                                    if (handle_byte(byte, event)) {
+                                        if (offset_skipped) {
+                                            if (event.t > previous_t) {
+                                                previous_t = event.t;
+                                                std::this_thread::sleep_until(
+                                                    time_reference + std::chrono::microseconds(event.t - initial_t));
+                                            }
+                                        } else {
+                                            offset_skipped = true;
+                                            initial_t = event.t;
+                                            previous_t = event.t;
+                                        }
+                                        _handle_event(event);
+                                    }
+                                }
+                            }
+                        }
+                        case dispatch::synchronously: {
+                            auto time_reference = std::chrono::system_clock::now();
+                            uint64_t previous_t = 0;
+                            while (_running.load(std::memory_order_relaxed)) {
+                                _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                if (_event_stream->eof()) {
+                                    for (auto byte_iterator = bytes.begin();
+                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         ++byte_iterator) {
+                                        if (handle_byte(*byte_iterator, event)) {
+                                            if (event.t > previous_t) {
+                                                std::this_thread::sleep_until(
+                                                    time_reference + std::chrono::microseconds(event.t));
+                                            }
+                                            previous_t = event.t;
+                                            _handle_event(event);
+                                        }
+                                    }
+                                    if (_must_restart()) {
+                                        _event_stream->clear();
+                                        _event_stream->seekg(
+                                            event_stream_signature().size() + event_stream_version().size() + 1);
+                                        handle_byte.reset();
+                                        event = {};
+                                        time_reference = std::chrono::system_clock::now();
+                                        continue;
+                                    }
+                                    throw end_of_file();
+                                }
+                                for (auto byte : bytes) {
+                                    if (handle_byte(byte, event)) {
+                                        if (event.t > previous_t) {
+                                            std::this_thread::sleep_until(
+                                                time_reference + std::chrono::microseconds(event.t));
+                                        }
+                                        previous_t = event.t;
+                                        _handle_event(event);
+                                    }
+                                }
+                            }
+                        }
+                        case dispatch::as_fast_as_possible: {
+                            while (_running.load(std::memory_order_relaxed)) {
+                                _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+                                if (_event_stream->eof()) {
+                                    for (auto byte_iterator = bytes.begin();
+                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         ++byte_iterator) {
+                                        if (handle_byte(*byte_iterator, event)) {
+                                            _handle_event(event);
+                                        }
+                                    }
+                                    if (_must_restart()) {
+                                        _event_stream->clear();
+                                        _event_stream->seekg(
+                                            event_stream_signature().size() + event_stream_version().size() + 1);
+                                        handle_byte.reset();
+                                        event = {};
+                                        continue;
+                                    }
+                                    throw end_of_file();
+                                }
+                                for (auto byte : bytes) {
+                                    if (handle_byte(byte, event)) {
+                                        _handle_event(event);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {
+                    _handle_exception(std::current_exception());
+                }
+            });
         }
-        color_event_stream_observable(const color_event_stream_observable&) = delete;
-        color_event_stream_observable(color_event_stream_observable&&) = default;
-        color_event_stream_observable& operator=(const color_event_stream_observable&) = delete;
-        color_event_stream_observable& operator=(color_event_stream_observable&&) = default;
-        virtual ~color_event_stream_observable() {
+        observable(const observable&) = delete;
+        observable(observable&&) = default;
+        observable& operator=(const observable&) = delete;
+        observable& operator=(observable&&) = default;
+        virtual ~observable() {
             _running.store(false, std::memory_order_relaxed);
             _loop.join();
         }
 
         protected:
         std::unique_ptr<std::istream> _event_stream;
+        HandleEvent _handle_event;
+        HandleException _handle_exception;
+        MustRestart _must_restart;
+        dispatch _dispatch;
+        std::size_t _chunk_size;
         std::atomic_bool _running;
         std::thread _loop;
     };
 
-    /// make_color_event_stream_observable creates an event stream observable from functors.
-    template <typename HandleEvent, typename HandleException, typename MustRestart = decltype(&false_function)>
-    std::unique_ptr<color_event_stream_observable<HandleEvent, HandleException, MustRestart>>
-    make_color_event_stream_observable(
+    /// make_observable creates an event stream observable from functors.
+    template <
+        type event_stream_type,
+        typename HandleEvent,
+        typename HandleException,
+        typename MustRestart = decltype(&false_function)>
+    std::unique_ptr<observable<event_stream_type, HandleEvent, HandleException, MustRestart>> make_observable(
         std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         HandleException handle_exception,
         MustRestart must_restart = &false_function,
-        event_stream_observable::dispatch dispatch = event_stream_observable::dispatch::synchronously_but_skip_offset,
+        dispatch dispatch = dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
-        return sepia::make_unique<color_event_stream_observable<HandleEvent, HandleException, MustRestart>>(
+        return sepia::make_unique<observable<event_stream_type, HandleEvent, HandleException, MustRestart>>(
             std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::forward<HandleException>(handle_exception),
@@ -1496,20 +1099,76 @@ namespace sepia {
             chunk_size);
     }
 
-    /// join_color_event_stream_observable creates an event stream observable from functors and blocks until the end of
-    /// the input file is reached.
-    template <typename HandleEvent>
-    void join_color_event_stream_observable(
+    /// capture_exception stores an exception pointer and notifies a condition variable.
+    class capture_exception {
+        public:
+        capture_exception() {}
+        capture_exception(const capture_exception&) = delete;
+        capture_exception(capture_exception&&) = default;
+        capture_exception& operator=(const capture_exception&) = delete;
+        capture_exception& operator=(capture_exception&&) = default;
+        virtual ~capture_exception() {}
+
+        /// operator() handles an exception.
+        virtual void operator()(std::exception_ptr exception) {
+            {
+                std::unique_lock<std::mutex> lock(_mutex);
+                _exception = exception;
+            }
+            _condition_variable.notify_one();
+        }
+
+        /// wait blocks until the held exception is set.
+        virtual void wait() {
+            std::unique_lock<std::mutex> exception_lock(_mutex);
+            if (_exception == nullptr) {
+                _condition_variable.wait(exception_lock, [&] { return _exception != nullptr; });
+            }
+        }
+
+        /// rethrow_unless raises the internally held exception unless it matches one of the given types.
+        template <typename... Exceptions>
+        void rethrow_unless() {
+            catch_index<0, Exceptions...>();
+        }
+
+        protected:
+        /// catch_index catches the n-th exception type.
+        template <std::size_t index, typename... Exceptions>
+            typename std::enable_if < index<sizeof...(Exceptions), void>::type catch_index() {
+            using Exception = typename std::tuple_element<index, std::tuple<Exceptions...>>::type;
+            try {
+                catch_index<index + 1, Exceptions...>();
+            } catch (const Exception&) {
+                return;
+            }
+        }
+
+        /// catch_index is a termination for the template loop.
+        template <std::size_t index, typename... Exceptions>
+        typename std::enable_if<index == sizeof...(Exceptions), void>::type catch_index() {
+            std::rethrow_exception(_exception);
+        }
+
+        std::mutex _mutex;
+        std::condition_variable _condition_variable;
+        std::exception_ptr _exception;
+    };
+
+    /// join_observable creates an event stream observable from functors and blocks until the end
+    /// of the input stream is reached.
+    template <type event_stream_type, typename HandleEvent>
+    void join_observable(
         std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
-        auto color_event_stream_observable = make_color_event_stream_observable(
+        auto observable = make_observable<event_stream_type>(
             std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::ref(capture_observable_exception),
             &false_function,
-            event_stream_observable::dispatch::as_fast_as_possible,
+            dispatch::as_fast_as_possible,
             chunk_size);
         capture_observable_exception.wait();
         capture_observable_exception.rethrow_unless<end_of_file>();
@@ -2366,7 +2025,7 @@ namespace sepia {
             _events(fifo_size) {
             _buffer_loop = std::thread([this]() -> void {
                 try {
-                    Event event;
+                    Event event = {};
                     while (_buffer_running.load(std::memory_order_relaxed)) {
                         const auto current_head = _head.load(std::memory_order_relaxed);
                         if (current_head == _tail.load(std::memory_order_acquire)) {
