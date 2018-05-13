@@ -3,32 +3,50 @@
 #include "../third_party/Catch2/single_include/catch.hpp"
 #include <sstream>
 
+const std::string examples =
+    sepia::join({sepia::dirname(sepia::dirname(__FILE__)), "third_party", "event_stream", "examples"});
+
+TEST_CASE("read generic header type", "[sepia::read_type]") {
+    REQUIRE(
+        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "generic.es"}))).type
+        == sepia::type::generic);
+}
+
 TEST_CASE("read DVS header type", "[sepia::read_type]") {
     REQUIRE(
-        sepia::read_header(sepia::filename_to_ifstream(sepia::join({sepia::dirname(__FILE__), "dvs.es"}))).type
-        == sepia::type::dvs);
+        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "dvs.es"}))).type == sepia::type::dvs);
 }
 
 TEST_CASE("read ATIS header type", "[sepia::read_type]") {
     REQUIRE(
-        sepia::read_header(sepia::filename_to_ifstream(sepia::join({sepia::dirname(__FILE__), "atis.es"}))).type
-        == sepia::type::atis);
+        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "atis.es"}))).type == sepia::type::atis);
 }
 
 TEST_CASE("read color header type", "[sepia::read_type]") {
     REQUIRE(
-        sepia::read_header(sepia::filename_to_ifstream(sepia::join({sepia::dirname(__FILE__), "color.es"}))).type
+        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "color.es"}))).type
         == sepia::type::color);
+}
+
+TEST_CASE("count generic events", "[sepia::join_observable<sepia::type::generic>]") {
+    std::size_t count = 0;
+    sepia::join_observable<sepia::type::generic>(
+        sepia::filename_to_ifstream(sepia::join({examples, "generic.es"})),
+        [&](sepia::generic_event) -> void { ++count; });
+    if (count != 70) {
+        FAIL(
+            "the event stream observable generated an unexpected number of events (expected 70, got "
+            + std::to_string(count) + ")");
+    }
 }
 
 TEST_CASE("count DVS events", "[sepia::join_observable<sepia::type::atis>]") {
     std::size_t count = 0;
     sepia::join_observable<sepia::type::dvs>(
-        sepia::filename_to_ifstream(sepia::join({sepia::dirname(__FILE__), "dvs.es"})),
-        [&](sepia::dvs_event) -> void { ++count; });
-    if (count != 476203) {
+        sepia::filename_to_ifstream(sepia::join({examples, "dvs.es"})), [&](sepia::dvs_event) -> void { ++count; });
+    if (count != 473225) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 2418241, got "
+            "the event stream observable generated an unexpected number of events (expected 473225, got "
             + std::to_string(count) + ")");
     }
 }
@@ -36,11 +54,10 @@ TEST_CASE("count DVS events", "[sepia::join_observable<sepia::type::atis>]") {
 TEST_CASE("count ATIS events", "[sepia::join_observable<sepia::type::atis>]") {
     std::size_t count = 0;
     sepia::join_observable<sepia::type::atis>(
-        sepia::filename_to_ifstream(sepia::join({sepia::dirname(__FILE__), "atis.es"})),
-        [&](sepia::atis_event) -> void { ++count; });
-    if (count != 1428204) {
+        sepia::filename_to_ifstream(sepia::join({examples, "atis.es"})), [&](sepia::atis_event) -> void { ++count; });
+    if (count != 1419176) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 2418241, got "
+            "the event stream observable generated an unexpected number of events (expected 1419176, got "
             + std::to_string(count) + ")");
     }
 }
@@ -48,17 +65,33 @@ TEST_CASE("count ATIS events", "[sepia::join_observable<sepia::type::atis>]") {
 TEST_CASE("count color events", "[sepia::join_observable<sepia::type::color>]") {
     std::size_t count = 0;
     sepia::join_observable<sepia::type::color>(
-        sepia::filename_to_ifstream(sepia::join({sepia::dirname(__FILE__), "color.es"})),
-        [&](sepia::color_event) -> void { ++count; });
-    if (count != 976510) {
+        sepia::filename_to_ifstream(sepia::join({examples, "color.es"})), [&](sepia::color_event) -> void { ++count; });
+    if (count != 473225) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 2839574, got "
+            "the event stream observable generated an unexpected number of events (expected 473225, got "
             + std::to_string(count) + ")");
     }
 }
 
+TEST_CASE("write generic events", "[sepia::write<sepia::type::generic>]") {
+    const auto filename = sepia::join({examples, "generic.es"});
+    std::string bytes;
+    {
+        auto input = sepia::filename_to_ifstream(filename);
+        input->seekg(0, std::ifstream::end);
+        bytes.resize(input->tellg());
+        input->seekg(0, std::ifstream::beg);
+        input->read(&bytes[0], bytes.size());
+    }
+    std::stringstream output;
+    sepia::join_observable<sepia::type::generic>(
+        sepia::filename_to_ifstream(filename), sepia::write_to_reference<sepia::type::generic>(output));
+    REQUIRE(bytes.size() == output.str().size());
+    REQUIRE(std::strcmp(bytes.c_str(), output.str().c_str()) == 0);
+}
+
 TEST_CASE("write DVS events", "[sepia::write<sepia::type::dvs>]") {
-    const auto filename = sepia::join({sepia::dirname(__FILE__), "dvs.es"});
+    const auto filename = sepia::join({examples, "dvs.es"});
     std::string bytes;
     {
         auto input = sepia::filename_to_ifstream(filename);
@@ -77,7 +110,7 @@ TEST_CASE("write DVS events", "[sepia::write<sepia::type::dvs>]") {
 }
 
 TEST_CASE("write ATIS events", "[sepia::write<sepia::type::atis>]") {
-    const auto filename = sepia::join({sepia::dirname(__FILE__), "atis.es"});
+    const auto filename = sepia::join({examples, "atis.es"});
     std::string bytes;
     {
         auto input = sepia::filename_to_ifstream(filename);
@@ -91,24 +124,12 @@ TEST_CASE("write ATIS events", "[sepia::write<sepia::type::atis>]") {
     sepia::join_observable<sepia::type::atis>(
         sepia::filename_to_ifstream(filename),
         sepia::write_to_reference<sepia::type::atis>(output, header.width, header.height));
-
-    // @DEBUG {
-    {
-        std::ofstream debug_output("/Users/Alex/idv/libraries/sepia/debug_input.bin");
-        debug_output.write(bytes.data(), bytes.size());
-    }
-    {
-        std::ofstream debug_output("/Users/Alex/idv/libraries/sepia/debug_output.bin");
-        debug_output.write(output.str().data(), output.str().size());
-    }
-    // }
-
     REQUIRE(bytes.size() == output.str().size());
     REQUIRE(std::strcmp(bytes.c_str(), output.str().c_str()) == 0);
 }
 
 TEST_CASE("write color events", "[sepia::write<sepia::type::color>]") {
-    const auto filename = sepia::join({sepia::dirname(__FILE__), "color.es"});
+    const auto filename = sepia::join({examples, "color.es"});
     std::string bytes;
     {
         auto input = sepia::filename_to_ifstream(filename);
