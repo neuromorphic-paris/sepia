@@ -415,16 +415,16 @@ namespace sepia {
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, generic_event& generic_event) {
             switch (_state) {
-                case state::idle: {
+                case state::idle:
                     if (byte == 0b11111111) {
                         generic_event.t += 0b11111110;
                     } else if (byte != 0b11111110) {
                         generic_event.t += byte;
                         _state = state::byte0;
                     }
-                }
-                case state::byte0: {
-                    _bytes_size |= (((byte & 0b1111111) >> 1) << (7 * _index));
+                    return false;
+                case state::byte0:
+                    _bytes_size |= ((byte >> 1) << (7 * _index));
                     if ((byte & 1) == 0) {
                         generic_event.bytes.clear();
                         _index = 0;
@@ -434,9 +434,11 @@ namespace sepia {
                         }
                         generic_event.bytes.reserve(_bytes_size);
                         _state = state::size_byte;
+                    } else {
+                        ++_index;
                     }
-                }
-                case state::size_byte: {
+                    return false;
+                case state::size_byte:
                     generic_event.bytes.push_back(byte);
                     if (generic_event.bytes.size() == _bytes_size) {
                         _state = state::idle;
@@ -444,9 +446,8 @@ namespace sepia {
                         _bytes_size = 0;
                         return true;
                     }
-                }
+                    return false;
             }
-            return false;
         }
 
         /// reset initializes the state machine.
@@ -483,7 +484,7 @@ namespace sepia {
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, dvs_event& dvs_event) {
             switch (_state) {
-                case state::idle: {
+                case state::idle:
                     if (byte == 0b11111111) {
                         dvs_event.t += 0b1111111;
                     } else if (byte != 0b11111110) {
@@ -492,27 +493,22 @@ namespace sepia {
                         _state = state::byte0;
                     }
                     return false;
-                }
-                case state::byte0: {
+                case state::byte0:
                     dvs_event.x = byte;
                     _state = state::byte1;
                     return false;
-                }
-                case state::byte1: {
+                case state::byte1:
                     dvs_event.x |= (byte << 8);
                     _state = state::byte2;
                     return false;
-                }
-                case state::byte2: {
+                case state::byte2:
                     dvs_event.y = byte;
                     _state = state::byte3;
                     return false;
-                }
-                case state::byte3: {
+                case state::byte3:
                     dvs_event.y |= (byte << 8);
                     _state = state::idle;
                     return true;
-                }
             }
         }
 
@@ -548,7 +544,7 @@ namespace sepia {
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, atis_event& atis_event) {
             switch (_state) {
-                case state::idle: {
+                case state::idle:
                     if ((byte & 0b11111100) == 0b11111100) {
                         atis_event.t += 0b111111 * (byte & 0b11);
                     } else {
@@ -558,27 +554,22 @@ namespace sepia {
                         _state = state::byte0;
                     }
                     return false;
-                }
-                case state::byte0: {
+                case state::byte0:
                     atis_event.x = byte;
                     _state = state::byte1;
                     return false;
-                }
-                case state::byte1: {
+                case state::byte1:
                     atis_event.x |= (byte << 8);
                     _state = state::byte2;
                     return false;
-                }
-                case state::byte2: {
+                case state::byte2:
                     atis_event.y = byte;
                     _state = state::byte3;
                     return false;
-                }
-                case state::byte3: {
+                case state::byte3:
                     atis_event.y |= (byte << 8);
                     _state = state::idle;
                     return true;
-                }
             }
         }
 
@@ -690,9 +681,7 @@ namespace sepia {
     template <>
     class write_to_reference<type::generic> {
         public:
-        write_to_reference<type::generic>(std::ostream& event_stream) :
-            _event_stream(event_stream),
-            _previous_t(0) {
+        write_to_reference<type::generic>(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
         write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
@@ -713,9 +702,10 @@ namespace sepia {
             }
             _event_stream.put(relative_t);
             for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
-                _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) == 0 ? 0 : 1));
+                _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) > 0 ? 1 : 0));
             }
             _event_stream.write(reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
+            _previous_t = generic_event.t;
         }
 
         protected:
