@@ -867,6 +867,8 @@ namespace sepia {
         write<type::generic>(std::unique_ptr<std::ostream> event_stream) :
             _event_stream(std::move(event_stream)),
             _write_to_reference(*_event_stream) {}
+        write<type::generic>(std::unique_ptr<std::ostream> event_stream, uint16_t, uint16_t) :
+            write<type::generic>(std::move(event_stream)) {}
         write<type::generic>(const write<type::generic>&) = delete;
         write<type::generic>(write<type::generic>&&) = default;
         write<type::generic>& operator=(const write<type::generic>&) = delete;
