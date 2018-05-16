@@ -35,8 +35,7 @@ TEST_CASE("count generic events", "[sepia::join_observable<sepia::type::generic>
         [&](sepia::generic_event) -> void { ++count; });
     if (count != 70) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 70, got "
-            + std::to_string(count) + ")");
+            "the observable generated an unexpected number of events (expected 70, got " + std::to_string(count) + ")");
     }
 }
 
@@ -46,8 +45,8 @@ TEST_CASE("count DVS events", "[sepia::join_observable<sepia::type::atis>]") {
         sepia::filename_to_ifstream(sepia::join({examples, "dvs.es"})), [&](sepia::dvs_event) -> void { ++count; });
     if (count != 473225) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 473225, got "
-            + std::to_string(count) + ")");
+            "the observable generated an unexpected number of events (expected 473225, got " + std::to_string(count)
+            + ")");
     }
 }
 
@@ -55,10 +54,10 @@ TEST_CASE("count ATIS events", "[sepia::join_observable<sepia::type::atis>]") {
     std::size_t count = 0;
     sepia::join_observable<sepia::type::atis>(
         sepia::filename_to_ifstream(sepia::join({examples, "atis.es"})), [&](sepia::atis_event) -> void { ++count; });
-    if (count != 1419176) {
+    if (count != 1326017) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 1419176, got "
-            + std::to_string(count) + ")");
+            "the observable generated an unexpected number of events (expected 1326017, got " + std::to_string(count)
+            + ")");
     }
 }
 
@@ -68,8 +67,8 @@ TEST_CASE("count color events", "[sepia::join_observable<sepia::type::color>]") 
         sepia::filename_to_ifstream(sepia::join({examples, "color.es"})), [&](sepia::color_event) -> void { ++count; });
     if (count != 473225) {
         FAIL(
-            "the event stream observable generated an unexpected number of events (expected 473225, got "
-            + std::to_string(count) + ")");
+            "the observable generated an unexpected number of events (expected 473225, got " + std::to_string(count)
+            + ")");
     }
 }
 
