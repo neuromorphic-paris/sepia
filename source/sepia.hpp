@@ -341,7 +341,7 @@ namespace sepia {
     }
 
     /// write_header writes the header bytes to a byte stream.
-    template <type event_stream_type, typename = typename std::enable_if<event_stream_type != type::generic>>
+    template <type event_stream_type>
     void write_header(std::ostream& event_stream, uint16_t width, uint16_t height) {
         event_stream.write(event_stream_signature().data(), event_stream_signature().size());
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
@@ -358,6 +358,10 @@ namespace sepia {
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
         auto type_byte = static_cast<uint8_t>(event_stream_type);
         event_stream.put(*reinterpret_cast<char*>(&type_byte));
+    }
+    template <>
+    void write_header<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) {
+        write_header<type::generic>(event_stream);
     }
 
     /// split separates a stream of ATIS events into a stream of DVS events and a stream of theshold crossings.
