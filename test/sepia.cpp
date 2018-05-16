@@ -83,11 +83,15 @@ TEST_CASE("write generic events", "[sepia::write<sepia::type::generic>]") {
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
-    std::stringstream output;
-    sepia::join_observable<sepia::type::generic>(
-        sepia::filename_to_ifstream(filename), sepia::write_to_reference<sepia::type::generic>(output));
-    REQUIRE(bytes.size() == output.str().size());
-    REQUIRE(std::strcmp(bytes.c_str(), output.str().c_str()) == 0);
+    std::string output_bytes;
+    {
+        std::ostringstream output;
+        sepia::join_observable<sepia::type::generic>(
+            sepia::filename_to_ifstream(filename), sepia::write_to_reference<sepia::type::generic>(output));
+        output_bytes = output.str();
+    }
+    REQUIRE(bytes.size() == output_bytes.size());
+    REQUIRE(std::strcmp(bytes.c_str(), output_bytes.c_str()) == 0);
 }
 
 TEST_CASE("write DVS events", "[sepia::write<sepia::type::dvs>]") {
@@ -100,13 +104,17 @@ TEST_CASE("write DVS events", "[sepia::write<sepia::type::dvs>]") {
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
-    const auto header = sepia::read_header(sepia::filename_to_ifstream(filename));
-    std::stringstream output;
-    sepia::join_observable<sepia::type::dvs>(
-        sepia::filename_to_ifstream(filename),
-        sepia::write_to_reference<sepia::type::dvs>(output, header.width, header.height));
-    REQUIRE(bytes.size() == output.str().size());
-    REQUIRE(std::strcmp(bytes.c_str(), output.str().c_str()) == 0);
+    std::string output_bytes;
+    {
+        const auto header = sepia::read_header(sepia::filename_to_ifstream(filename));
+        std::ostringstream output;
+        sepia::join_observable<sepia::type::dvs>(
+            sepia::filename_to_ifstream(filename),
+            sepia::write_to_reference<sepia::type::dvs>(output, header.width, header.height));
+        output_bytes = output.str();
+    }
+    REQUIRE(bytes.size() == output_bytes.size());
+    REQUIRE(std::strcmp(bytes.c_str(), output_bytes.c_str()) == 0);
 }
 
 TEST_CASE("write ATIS events", "[sepia::write<sepia::type::atis>]") {
@@ -119,13 +127,17 @@ TEST_CASE("write ATIS events", "[sepia::write<sepia::type::atis>]") {
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
-    const auto header = sepia::read_header(sepia::filename_to_ifstream(filename));
-    std::stringstream output;
-    sepia::join_observable<sepia::type::atis>(
-        sepia::filename_to_ifstream(filename),
-        sepia::write_to_reference<sepia::type::atis>(output, header.width, header.height));
-    REQUIRE(bytes.size() == output.str().size());
-    REQUIRE(std::strcmp(bytes.c_str(), output.str().c_str()) == 0);
+    std::string output_bytes;
+    {
+        const auto header = sepia::read_header(sepia::filename_to_ifstream(filename));
+        std::ostringstream output;
+        sepia::join_observable<sepia::type::atis>(
+            sepia::filename_to_ifstream(filename),
+            sepia::write_to_reference<sepia::type::atis>(output, header.width, header.height));
+        output_bytes = output.str();
+    }
+    REQUIRE(bytes.size() == output_bytes.size());
+    REQUIRE(std::strcmp(bytes.c_str(), output_bytes.c_str()) == 0);
 }
 
 TEST_CASE("write color events", "[sepia::write<sepia::type::color>]") {
@@ -138,13 +150,17 @@ TEST_CASE("write color events", "[sepia::write<sepia::type::color>]") {
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
-    const auto header = sepia::read_header(sepia::filename_to_ifstream(filename));
-    std::stringstream output;
-    sepia::join_observable<sepia::type::color>(
-        sepia::filename_to_ifstream(filename),
-        sepia::write_to_reference<sepia::type::color>(output, header.width, header.height));
-    REQUIRE(bytes.size() == output.str().size());
-    REQUIRE(std::strcmp(bytes.c_str(), output.str().c_str()) == 0);
+    std::string output_bytes;
+    {
+        const auto header = sepia::read_header(sepia::filename_to_ifstream(filename));
+        std::ostringstream output;
+        sepia::join_observable<sepia::type::color>(
+            sepia::filename_to_ifstream(filename),
+            sepia::write_to_reference<sepia::type::color>(output, header.width, header.height));
+        output_bytes = output.str();
+    }
+    REQUIRE(bytes.size() == output_bytes.size());
+    REQUIRE(std::strcmp(bytes.c_str(), output_bytes.c_str()) == 0);
 }
 
 TEST_CASE("parse JSON parameters", "[sepia::parameter]") {
