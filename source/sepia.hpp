@@ -780,7 +780,6 @@ namespace sepia {
                 }
                 relative_t -= number_of_overflows * 0b111111;
             }
-
             _event_stream.put(
                 (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0));
             _event_stream.put(atis_event.x & 0b11111111);
