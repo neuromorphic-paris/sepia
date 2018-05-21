@@ -994,8 +994,8 @@ namespace sepia {
                                     }
                                     if (_must_restart()) {
                                         _event_stream->clear();
-                                        _event_stream->seekg(
-                                            event_stream_signature().size() + event_stream_version().size() + 1);
+                                        _event_stream->seekg(0, std::istream::beg);
+                                        read_header(*_event_stream);
                                         offset_skipped = false;
                                         handle_byte.reset();
                                         event = {};
@@ -1042,8 +1042,8 @@ namespace sepia {
                                     }
                                     if (_must_restart()) {
                                         _event_stream->clear();
-                                        _event_stream->seekg(
-                                            event_stream_signature().size() + event_stream_version().size() + 1);
+                                        _event_stream->seekg(0, std::istream::beg);
+                                        read_header(*_event_stream);
                                         handle_byte.reset();
                                         event = {};
                                         time_reference = std::chrono::system_clock::now();
@@ -1076,8 +1076,8 @@ namespace sepia {
                                     }
                                     if (_must_restart()) {
                                         _event_stream->clear();
-                                        _event_stream->seekg(
-                                            event_stream_signature().size() + event_stream_version().size() + 1);
+                                        _event_stream->seekg(0, std::istream::beg);
+                                        read_header(*_event_stream);
                                         handle_byte.reset();
                                         event = {};
                                         continue;
