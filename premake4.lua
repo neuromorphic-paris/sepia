@@ -1,7 +1,7 @@
 solution 'sepia'
     configurations {'release', 'debug'}
     location 'build'
-    project 'test'
+    project 'sepia'
         kind 'ConsoleApp'
         language 'C++'
         location 'build'

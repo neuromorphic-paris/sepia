@@ -131,7 +131,21 @@ namespace sepia {
     } __attribute__((packed));
     using color_event = event<type::color>;
 
-    /// threshold_crossing represent the parameters of a threshold crossing.
+    /// simple_event represents the parameters of a specialized DVS event.
+    struct simple_event {
+        /// t represents the event's timestamp.
+        uint64_t t;
+
+        /// x represents the coordinate of the event on the sensor grid alongside the horizontal axis.
+        /// x is 0 on the left, and increases from left to right.
+        uint16_t x;
+
+        /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
+        /// y is 0 on the bottom, and increases from bottom to top.
+        uint16_t y;
+    } __attribute__((packed));
+
+    /// threshold_crossing represents the parameters of a specialized ATIS event.
     struct threshold_crossing {
         /// t represents the event's timestamp.
         uint64_t t;
@@ -364,18 +378,49 @@ namespace sepia {
         write_header<type::generic>(event_stream);
     }
 
+    /// split separates a stream of DVS or ATIS events into specialized streams.
+    template <type event_stream_type, typename HandleFirstSpecializedEvent, typename HandleSecondSpecializedEvent>
+    class split;
+
+    /// split separates a stream of DVS events into two streams of simple events.
+    template <typename HandleIncreaseEvent, typename HandleDecreaseEvent>
+    class split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent> {
+        public:
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(HandleIncreaseEvent handle_increase_event, HandleDecreaseEvent handle_decrease_event) :
+            _handle_increase_event(std::forward<HandleIncreaseEvent>(handle_increase_event)),
+            _handle_decrease_event(std::forward<HandleDecreaseEvent>(handle_decrease_event)) {}
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(const split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&) = delete;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&&) = default;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>& operator=(const split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&) = delete;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>& operator=(split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&&) = default;
+        virtual ~split() {}
+
+        /// operator() handles an event.
+        virtual void operator()(dvs_event dvs_event) {
+            if (dvs_event.is_increase) {
+                _handle_increase_event(simple_event{dvs_event.t, dvs_event.x, dvs_event.y});
+            } else {
+                _handle_decrease_event(simple_event{dvs_event.t, dvs_event.x, dvs_event.y});
+            }
+        }
+
+        protected:
+        HandleIncreaseEvent _handle_increase_event;
+        HandleDecreaseEvent _handle_decrease_event;
+    };
+
     /// split separates a stream of ATIS events into a stream of DVS events and a stream of theshold crossings.
     template <typename HandleDvsEvent, typename HandleThresholdCrossing>
-    class split {
+    class split<type::atis, HandleDvsEvent, HandleThresholdCrossing> {
         public:
-        split(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) :
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) :
             _handle_dvs_event(std::forward<HandleDvsEvent>(handle_dvs_event)),
             _handle_threshold_crossing(std::forward<HandleThresholdCrossing>(handle_threshold_crossing)) {}
-        split(const split&) = delete;
-        split(split&&) = default;
-        split& operator=(const split&) = delete;
-        split& operator=(split&&) = default;
-        virtual ~split() {}
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(const split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&) = delete;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&&) = default;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>& operator=(const split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&) = delete;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>& operator=(split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&&) = default;
+        virtual ~split<type::atis, HandleDvsEvent, HandleThresholdCrossing>() {}
 
         /// operator() handles an event.
         virtual void operator()(atis_event atis_event) {
@@ -393,12 +438,12 @@ namespace sepia {
     };
 
     /// make_split creates a split from functors.
-    template <typename HandleDvsEvent, typename HandleThresholdCrossing>
-    split<HandleDvsEvent, HandleThresholdCrossing>
-    make_split(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) {
-        return split<HandleDvsEvent, HandleThresholdCrossing>(
-            std::forward<HandleDvsEvent>(handle_dvs_event),
-            std::forward<HandleThresholdCrossing>(handle_threshold_crossing));
+    template <type event_stream_type, typename HandleFirstSpecializedEvent, typename HandleSecondSpecializedEvent>
+    split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent>
+    make_split(HandleFirstSpecializedEvent handle_first_specialized_event, HandleSecondSpecializedEvent handle_second_specialized_event) {
+        return split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent>(
+            std::forward<HandleFirstSpecializedEvent>(handle_first_specialized_event),
+            std::forward<HandleSecondSpecializedEvent>(handle_second_specialized_event));
     }
 
     /// handle_byte implements an event stream state machine.
