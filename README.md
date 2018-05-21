@@ -39,7 +39,7 @@ premake4 gmake
 cd build
 make
 cd release
-./test
+./sepia
 ```
 
 After changing the code, format the source files by running from the *sepia* directory:
