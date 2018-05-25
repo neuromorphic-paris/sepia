@@ -22,12 +22,12 @@ User guides and code documentation are held in the [wiki](https://github.com/neu
 ## Development dependencies
 
 Sepia relies on [Premake 4.x](https://github.com/premake/premake-4.x) (x ≥ 3) to generate build configurations. Follow these steps to install it:
-  - __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install premake4`.
+  - __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt install premake4`.
   - __OS X__: Open a terminal and execute the command `brew install premake`. If the command is not found, you need to install Homebrew first with the command<br />
   `ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"`.
 
 [ClangFormat](https://clang.llvm.org/docs/ClangFormat.html) is used to unify coding styles. Follow these steps to install it:
-- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install clang-format`.
+- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt install clang-format`.
 - __OS X__: Open a terminal and execute the command `brew install clang-format`. If the command is not found, you need to install Homebrew first with the command<br />
 `ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"`.
 
