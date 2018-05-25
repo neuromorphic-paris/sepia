@@ -41,9 +41,9 @@ script:
             rm $formatted_filename
         done
         if [ "$valid" = false ]; then
-            false
+            travis_terminate 1
         fi
-    - premake4 gmake
-    - cd build
-    - make
-    - release/sepia
+    - premake4 gmake || travis_terminate 1
+    - cd build || travis_terminate 1
+    - make || travis_terminate 1
+    - release/sepia || travis_terminate 1
