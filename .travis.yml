@@ -38,6 +38,7 @@ script:
                 printf "'$filename' is not properly formatted, run \`clang-format -i '$filename'\`\n"
                 valid=false
             fi
+            rm $formatted_filename
         done
         if [ "$valid" = false ]; then
             false
