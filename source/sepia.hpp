@@ -290,7 +290,7 @@ namespace sepia {
     /// header bundles an event stream's header parameters.
     struct header {
         std::array<uint8_t, 3> version;
-        type type;
+        type event_stream_type;
         uint16_t width;
         uint16_t height;
     };
@@ -322,18 +322,18 @@ namespace sepia {
             }
             const auto type_byte = *reinterpret_cast<const uint8_t*>(&type_char);
             if (type_byte == static_cast<uint8_t>(type::generic)) {
-                header.type = type::generic;
+                header.event_stream_type = type::generic;
             } else if (type_byte == static_cast<uint8_t>(type::dvs)) {
-                header.type = type::dvs;
+                header.event_stream_type = type::dvs;
             } else if (type_byte == static_cast<uint8_t>(type::atis)) {
-                header.type = type::atis;
+                header.event_stream_type = type::atis;
             } else if (type_byte == static_cast<uint8_t>(type::color)) {
-                header.type = type::color;
+                header.event_stream_type = type::color;
             } else {
                 throw unsupported_event_type();
             }
         }
-        if (header.type != type::generic) {
+        if (header.event_stream_type != type::generic) {
             std::array<uint8_t, 4> size_bytes;
             event_stream.read(reinterpret_cast<char*>(size_bytes.data()), size_bytes.size());
             if (event_stream.eof()) {
@@ -969,7 +969,7 @@ namespace sepia {
             _chunk_size(chunk_size),
             _running(true) {
             const auto header = read_header(*_event_stream);
-            if (header.type != event_stream_type) {
+            if (header.event_stream_type != event_stream_type) {
                 throw unsupported_event_type();
             }
             _loop = std::thread([this]() {
