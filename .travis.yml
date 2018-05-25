@@ -43,9 +43,7 @@ script:
         if [ "$valid" = false ]; then
             false
         fi
-    - git submodule update --init --recursive
     - premake4 gmake
     - cd build
     - make
-    - cd release
-    - ./sepia
+    - release/sepia
