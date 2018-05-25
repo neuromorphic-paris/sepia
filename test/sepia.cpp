@@ -14,12 +14,14 @@ TEST_CASE("read generic header type", "[sepia::read_type]") {
 
 TEST_CASE("read DVS header type", "[sepia::read_type]") {
     REQUIRE(
-        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "dvs.es"}))).event_stream_type == sepia::type::dvs);
+        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "dvs.es"}))).event_stream_type
+        == sepia::type::dvs);
 }
 
 TEST_CASE("read ATIS header type", "[sepia::read_type]") {
     REQUIRE(
-        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "atis.es"}))).event_stream_type == sepia::type::atis);
+        sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "atis.es"}))).event_stream_type
+        == sepia::type::atis);
 }
 
 TEST_CASE("read color header type", "[sepia::read_type]") {
