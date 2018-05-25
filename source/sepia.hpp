@@ -386,13 +386,19 @@ namespace sepia {
     template <typename HandleIncreaseEvent, typename HandleDecreaseEvent>
     class split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent> {
         public:
-        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(HandleIncreaseEvent handle_increase_event, HandleDecreaseEvent handle_decrease_event) :
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(
+            HandleIncreaseEvent handle_increase_event,
+            HandleDecreaseEvent handle_decrease_event) :
             _handle_increase_event(std::forward<HandleIncreaseEvent>(handle_increase_event)),
             _handle_decrease_event(std::forward<HandleDecreaseEvent>(handle_decrease_event)) {}
-        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(const split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&) = delete;
-        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&&) = default;
-        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>& operator=(const split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&) = delete;
-        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>& operator=(split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&&) = default;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(
+            const split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&) = delete;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(
+            split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&&) = default;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&
+        operator=(const split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&) = delete;
+        split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&
+        operator=(split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>&&) = default;
         virtual ~split() {}
 
         /// operator() handles an event.
@@ -413,13 +419,19 @@ namespace sepia {
     template <typename HandleDvsEvent, typename HandleThresholdCrossing>
     class split<type::atis, HandleDvsEvent, HandleThresholdCrossing> {
         public:
-        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(HandleDvsEvent handle_dvs_event, HandleThresholdCrossing handle_threshold_crossing) :
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(
+            HandleDvsEvent handle_dvs_event,
+            HandleThresholdCrossing handle_threshold_crossing) :
             _handle_dvs_event(std::forward<HandleDvsEvent>(handle_dvs_event)),
             _handle_threshold_crossing(std::forward<HandleThresholdCrossing>(handle_threshold_crossing)) {}
-        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(const split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&) = delete;
-        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&&) = default;
-        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>& operator=(const split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&) = delete;
-        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>& operator=(split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&&) = default;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(
+            const split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&) = delete;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(
+            split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&&) = default;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&
+        operator=(const split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&) = delete;
+        split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&
+        operator=(split<type::atis, HandleDvsEvent, HandleThresholdCrossing>&&) = default;
         virtual ~split<type::atis, HandleDvsEvent, HandleThresholdCrossing>() {}
 
         /// operator() handles an event.
@@ -439,8 +451,9 @@ namespace sepia {
 
     /// make_split creates a split from functors.
     template <type event_stream_type, typename HandleFirstSpecializedEvent, typename HandleSecondSpecializedEvent>
-    split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent>
-    make_split(HandleFirstSpecializedEvent handle_first_specialized_event, HandleSecondSpecializedEvent handle_second_specialized_event) {
+    split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent> make_split(
+        HandleFirstSpecializedEvent handle_first_specialized_event,
+        HandleSecondSpecializedEvent handle_second_specialized_event) {
         return split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent>(
             std::forward<HandleFirstSpecializedEvent>(handle_first_specialized_event),
             std::forward<HandleSecondSpecializedEvent>(handle_second_specialized_event));
@@ -1217,6 +1230,51 @@ namespace sepia {
     /// forward-declare parameter for referencing in unvalidated_parameter.
     class parameter;
 
+    /// unvalidated_parameter represents either a parameter subset or a JSON stream to be validated.
+    /// It mimics a union behavior, with properly managed attributes' lifecycles.
+    class unvalidated_parameter {
+        public:
+        unvalidated_parameter(std::unique_ptr<std::istream> json_stream) :
+            _is_json_stream(true),
+            _json_stream(std::move(json_stream)) {}
+        unvalidated_parameter(std::unique_ptr<parameter> parameter) :
+            _is_json_stream(false),
+            _parameter(std::move(parameter)) {}
+        unvalidated_parameter(const unvalidated_parameter&) = delete;
+        unvalidated_parameter(unvalidated_parameter&&) = default;
+        unvalidated_parameter& operator=(const unvalidated_parameter&) = delete;
+        unvalidated_parameter& operator=(unvalidated_parameter&&) = default;
+        virtual ~unvalidated_parameter() {}
+
+        /// is_json_stream returns true if the object was constructed as a stream.
+        virtual bool is_json_stream() const {
+            return _is_json_stream;
+        }
+
+        /// to_json_stream returns the provided json_stream.
+        /// An error is thrown if the object was constructed with a parameter.
+        virtual std::istream& to_json_stream() {
+            if (!_is_json_stream) {
+                throw parameter_error("The unvalidated parameter is not a string");
+            }
+            return *_json_stream;
+        }
+
+        /// to_parameter returns the provided parameter.
+        /// An error is thrown if the object was constructed with a stream.
+        virtual const parameter& to_parameter() const {
+            if (_is_json_stream) {
+                throw parameter_error("The unvalidated parameter is not a parameter");
+            }
+            return *_parameter;
+        }
+
+        protected:
+        bool _is_json_stream;
+        std::unique_ptr<std::istream> _json_stream;
+        std::unique_ptr<parameter> _parameter;
+    };
+
     /// forward-declare object_parameter and array_parameter for referencing in parameter.
     class object_parameter;
     class array_parameter;
@@ -1269,13 +1327,28 @@ namespace sepia {
         virtual void parse(std::istream& json_stream) {
             std::size_t character_count = 1;
             std::size_t line_count = 1;
-            load(json_stream, character_count, line_count);
+            parse_with_counts(json_stream, character_count, line_count);
         }
 
         /// parse sets the parameter value from a JSON stream.
         /// The given data is validated in the process.
         virtual void parse(std::unique_ptr<std::istream> json_stream) {
             parse(*json_stream);
+        }
+
+        /// load sets the parameter value from an other parameter.
+        /// The other parameter must a subset of this parameter, and is validated in the process.
+        virtual void load(const parameter& parameter) = 0;
+
+        /// parse_or_load sets the parameter value from an unvalidated_parameter.
+        virtual void parse_or_load(std::unique_ptr<sepia::unvalidated_parameter> unvalidated_parameter) {
+            if (unvalidated_parameter) {
+                if (unvalidated_parameter->is_json_stream()) {
+                    parse(unvalidated_parameter->to_json_stream());
+                } else {
+                    load(unvalidated_parameter->to_parameter());
+                }
+            }
         }
 
         /// get_array_parameter is called by a parent parameter when accessing a list value.
@@ -1309,12 +1382,9 @@ namespace sepia {
         /// clone generates a copy of the parameter.
         virtual std::unique_ptr<parameter> clone() const = 0;
 
-        /// load is called by a parent parameter when loading JSON data.
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) = 0;
-
-        /// load sets the parameter value from an other parameter.
-        /// The other parameter must a subset of this parameter, and is validated in the process.
-        virtual void load(const parameter& parameter) = 0;
+        /// parse_with_counts is called by a parent parameter when loading JSON data.
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) = 0;
 
         protected:
         /// has_character determines wheter a character is in a string of characters.
@@ -1547,7 +1617,8 @@ namespace sepia {
             }
             return sepia::make_unique<object_parameter>(std::move(new_parameter_by_key));
         }
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             uint8_t state = 0;
             std::string key;
             auto done = false;
@@ -1587,7 +1658,7 @@ namespace sepia {
                         }
                         break;
                     case 3:
-                        _parameter_by_key[key]->load(json_stream, character_count, line_count);
+                        _parameter_by_key[key]->parse_with_counts(json_stream, character_count, line_count);
                         state = 4;
                         break;
                     case 4: {
@@ -1692,7 +1763,8 @@ namespace sepia {
             }
             return sepia::make_unique<array_parameter>(std::move(new_parameters), _template_parameter->clone());
         }
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             _parameters.clear();
             uint8_t state = 0;
             std::string key;
@@ -1715,7 +1787,7 @@ namespace sepia {
                             done = true;
                         } else {
                             _parameters.push_back(_template_parameter->clone());
-                            _parameters.back()->load(json_stream, character_count, line_count);
+                            _parameters.back()->parse_with_counts(json_stream, character_count, line_count);
                             state = 2;
                         }
                         break;
@@ -1734,7 +1806,7 @@ namespace sepia {
                     }
                     case 3:
                         _parameters.push_back(_template_parameter->clone());
-                        _parameters.back()->load(json_stream, character_count, line_count);
+                        _parameters.back()->parse_with_counts(json_stream, character_count, line_count);
                         state = 2;
                         break;
                     default:
@@ -1796,7 +1868,8 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<boolean_parameter>(_value);
         }
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             trim(json_stream, character_count, line_count);
             std::string characters;
             for (;;) {
@@ -1854,7 +1927,8 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<number_parameter>(_value, _minimum, _maximum, _is_integer);
         }
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             trim(json_stream, character_count, line_count);
             _value = number(json_stream, character_count, line_count);
             try {
@@ -1930,7 +2004,8 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<string_parameter>(_value);
         }
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             trim(json_stream, character_count, line_count);
             _value = string(json_stream, character_count, line_count);
         }
@@ -1965,7 +2040,8 @@ namespace sepia {
         virtual std::unique_ptr<parameter> clone() const override {
             return sepia::make_unique<enum_parameter>(_value, _available_values);
         }
-        virtual void load(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
+        virtual void
+        parse_with_counts(std::istream& json_stream, std::size_t& character_count, std::size_t& line_count) override {
             trim(json_stream, character_count, line_count);
             _value = string(json_stream, character_count, line_count);
             try {
@@ -2000,51 +2076,6 @@ namespace sepia {
         }
 
         std::unordered_set<std::string> _available_values;
-    };
-
-    /// unvalidated_parameter represents either a parameter subset or a JSON stream to be validated.
-    /// It mimics a union behavior, with properly managed attributes' lifecycles.
-    class unvalidated_parameter {
-        public:
-        unvalidated_parameter(std::unique_ptr<std::istream> json_stream) :
-            _is_json_stream(true),
-            _json_stream(std::move(json_stream)) {}
-        unvalidated_parameter(std::unique_ptr<parameter> parameter) :
-            _is_json_stream(false),
-            _parameter(std::move(parameter)) {}
-        unvalidated_parameter(const unvalidated_parameter&) = delete;
-        unvalidated_parameter(unvalidated_parameter&&) = default;
-        unvalidated_parameter& operator=(const unvalidated_parameter&) = delete;
-        unvalidated_parameter& operator=(unvalidated_parameter&&) = default;
-        virtual ~unvalidated_parameter() {}
-
-        /// is_json_stream returns true if the object was constructed as a stream.
-        virtual bool is_json_stream() const {
-            return _is_json_stream;
-        }
-
-        /// to_json_stream returns the provided json_stream.
-        /// An error is thrown if the object was constructed with a parameter.
-        virtual std::istream& to_json_stream() {
-            if (!_is_json_stream) {
-                throw parameter_error("The unvalidated parameter is not a string");
-            }
-            return *_json_stream;
-        }
-
-        /// to_parameter returns the provided parameter.
-        /// An error is thrown if the object was constructed with a stream.
-        virtual const parameter& to_parameter() const {
-            if (_is_json_stream) {
-                throw parameter_error("The unvalidated parameter is not a parameter");
-            }
-            return *_parameter;
-        }
-
-        protected:
-        bool _is_json_stream;
-        std::unique_ptr<std::istream> _json_stream;
-        std::unique_ptr<parameter> _parameter;
     };
 
     /// specialized_camera represents a template-specialized generic event-based camera.
