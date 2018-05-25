@@ -959,13 +959,13 @@ namespace sepia {
             HandleEvent handle_event,
             HandleException handle_exception,
             MustRestart must_restart,
-            dispatch dispatch,
+            dispatch dispatch_events,
             std::size_t chunk_size) :
             _event_stream(std::move(event_stream)),
             _handle_event(std::forward<HandleEvent>(handle_event)),
             _handle_exception(std::forward<HandleException>(handle_exception)),
             _must_restart(std::forward<MustRestart>(must_restart)),
-            _dispatch(dispatch),
+            _dispatch_events(dispatch_events),
             _chunk_size(chunk_size),
             _running(true) {
             const auto header = read_header(*_event_stream);
@@ -977,7 +977,7 @@ namespace sepia {
                     event<event_stream_type> event = {};
                     handle_byte<event_stream_type> handle_byte;
                     std::vector<uint8_t> bytes(_chunk_size);
-                    switch (_dispatch) {
+                    switch (_dispatch_events) {
                         case dispatch::synchronously_but_skip_offset: {
                             auto offset_skipped = false;
                             auto time_reference = std::chrono::system_clock::now();
@@ -1124,7 +1124,7 @@ namespace sepia {
         HandleEvent _handle_event;
         HandleException _handle_exception;
         MustRestart _must_restart;
-        dispatch _dispatch;
+        dispatch _dispatch_events;
         std::size_t _chunk_size;
         std::atomic_bool _running;
         std::thread _loop;
@@ -1141,14 +1141,14 @@ namespace sepia {
         HandleEvent handle_event,
         HandleException handle_exception,
         MustRestart must_restart = &false_function,
-        dispatch dispatch = dispatch::synchronously_but_skip_offset,
+        dispatch dispatch_events = dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
         return sepia::make_unique<observable<event_stream_type, HandleEvent, HandleException, MustRestart>>(
             std::move(event_stream),
             std::forward<HandleEvent>(handle_event),
             std::forward<HandleException>(handle_exception),
             std::forward<MustRestart>(must_restart),
-            dispatch,
+            dispatch_events,
             chunk_size);
     }
 
