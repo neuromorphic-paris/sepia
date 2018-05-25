@@ -6,13 +6,7 @@
 const std::string examples =
     sepia::join({sepia::dirname(sepia::dirname(__FILE__)), "third_party", "event_stream", "examples"});
 
-#include <iostream> // @DEBUG
-
-
 TEST_CASE("read generic header type", "[sepia::read_type]") {
-
-    std::cout << "running examples from " << __FILE__ << std::endl; // @DEBUG
-
     REQUIRE(
         sepia::read_header(sepia::filename_to_ifstream(sepia::join({examples, "generic.es"}))).event_stream_type
         == sepia::type::generic);
