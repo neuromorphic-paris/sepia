@@ -53,7 +53,7 @@ namespace sepia {
     template <type event_stream_type>
     struct event;
 
-    /// event<type::generic> represents the parameters of a generic event.
+    /// generic_event represents the parameters of a generic event.
     template <>
     struct event<type::generic> {
         /// t represents the event's timestamp.
@@ -166,7 +166,7 @@ namespace sepia {
     class unreadable_file : public std::runtime_error {
         public:
         unreadable_file(const std::string& filename) :
-            std::runtime_error("The file '" + filename + "' could not be open for reading") {}
+            std::runtime_error("the file '" + filename + "' could not be open for reading") {}
     };
 
     /// unwritable_file is thrown whenan output file is not writable.
@@ -240,24 +240,6 @@ namespace sepia {
         parameter_error(const std::string& what) : std::logic_error(what) {}
     };
 
-    /// filename_to_ifstream creates a readable stream from a file.
-    inline std::unique_ptr<std::ifstream> filename_to_ifstream(const std::string& filename) {
-        auto stream = make_unique<std::ifstream>(filename);
-        if (!stream->good()) {
-            throw unreadable_file(filename);
-        }
-        return stream;
-    }
-
-    /// filename_to_ofstream creates a writable stream from a file.
-    inline std::unique_ptr<std::ofstream> filename_to_ofstream(const std::string& filename) {
-        auto stream = make_unique<std::ofstream>(filename);
-        if (!stream->good()) {
-            throw unwritable_file(filename);
-        }
-        return stream;
-    }
-
     /// dirname returns the directory part of the given path.
     inline std::string dirname(const std::string& path) {
         for (std::size_t index = path.size();;) {
@@ -287,11 +269,36 @@ namespace sepia {
         return join(components.begin(), components.end());
     }
 
+    /// filename_to_ifstream creates a readable stream from a file.
+    inline std::unique_ptr<std::ifstream> filename_to_ifstream(const std::string& filename) {
+        auto stream = make_unique<std::ifstream>(filename);
+        if (!stream->good()) {
+            throw unreadable_file(filename);
+        }
+        return stream;
+    }
+
+    /// filename_to_ofstream creates a writable stream from a file.
+    inline std::unique_ptr<std::ofstream> filename_to_ofstream(const std::string& filename) {
+        auto stream = make_unique<std::ofstream>(filename);
+        if (!stream->good()) {
+            throw unwritable_file(filename);
+        }
+        return stream;
+    }
+
     /// header bundles an event stream's header parameters.
     struct header {
+        /// version contains the version's major, minor and patch numbers in that order.
         std::array<uint8_t, 3> version;
+
+        /// event_stream_type is the type of the events in the associated stream.
         type event_stream_type;
+
+        /// width is at least one more than the largest x coordinate among the stream's events.
         uint16_t width;
+
+        /// heaight is at least one more than the largest y coordinate among the stream's events.
         uint16_t height;
     };
 
@@ -746,6 +753,7 @@ namespace sepia {
         write_to_reference<type::generic>(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
+        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) : write_to_reference<type::generic>(event_stream) {}
         write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
         write_to_reference<type::generic>(write_to_reference<type::generic>&&) = default;
         write_to_reference<type::generic>& operator=(const write_to_reference<type::generic>&) = delete;
@@ -754,6 +762,9 @@ namespace sepia {
 
         /// operator() handles an event.
         virtual void operator()(generic_event generic_event) {
+            if (generic_event.t < _previous_t) {
+                throw std::logic_error("the event's timestamp is smaller than the previous one's");
+            }
             auto relative_t = generic_event.t - _previous_t;
             if (relative_t >= 0b11111110) {
                 const auto number_of_overflows = relative_t / 0b11111110;
@@ -781,6 +792,8 @@ namespace sepia {
         public:
         write_to_reference<type::dvs>(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
+            _width(width),
+            _height(height),
             _previous_t(0) {
             write_header<type::dvs>(_event_stream, width, height);
         }
@@ -792,6 +805,12 @@ namespace sepia {
 
         /// operator() handles an event.
         virtual void operator()(dvs_event dvs_event) {
+            if (dvs_event.x >= _width || dvs_event.y >= _height) {
+                throw coordinates_overflow();
+            }
+            if (dvs_event.t < _previous_t) {
+                throw std::logic_error("the event's timestamp is smaller than the previous one's");
+            }
             auto relative_t = dvs_event.t - _previous_t;
             if (relative_t >= 0b1111111) {
                 const auto number_of_overflows = relative_t / 0b1111111;
@@ -810,6 +829,8 @@ namespace sepia {
 
         protected:
         std::ostream& _event_stream;
+        const uint16_t _width;
+        const uint16_t _height;
         uint64_t _previous_t;
     };
 
@@ -830,6 +851,12 @@ namespace sepia {
 
         /// operator() handles an event.
         virtual void operator()(atis_event atis_event) {
+            if (atis_event.x >= _width || atis_event.y >= _height) {
+                throw coordinates_overflow();
+            }
+            if (atis_event.t < _previous_t) {
+                throw std::logic_error("the event's timestamp is smaller than the previous one's");
+            }
             auto relative_t = atis_event.t - _previous_t;
             if (relative_t >= 0b111111) {
                 const auto number_of_overflows = relative_t / 0b111111;
@@ -873,6 +900,12 @@ namespace sepia {
 
         /// operator() handles an event.
         virtual void operator()(color_event color_event) {
+            if (color_event.x >= _width || color_event.y >= _height) {
+                throw coordinates_overflow();
+            }
+            if (color_event.t < _previous_t) {
+                throw std::logic_error("the event's timestamp is smaller than the previous one's");
+            }
             auto relative_t = color_event.t - _previous_t;
             if (relative_t >= 0b11111110) {
                 const auto number_of_overflows = relative_t / 0b11111110;
@@ -918,29 +951,6 @@ namespace sepia {
         protected:
         std::unique_ptr<std::ostream> _event_stream;
         write_to_reference<event_stream_type> _write_to_reference;
-    };
-    template <>
-    class write<type::generic> {
-        public:
-        write<type::generic>(std::unique_ptr<std::ostream> event_stream) :
-            _event_stream(std::move(event_stream)),
-            _write_to_reference(*_event_stream) {}
-        write<type::generic>(std::unique_ptr<std::ostream> event_stream, uint16_t, uint16_t) :
-            write<type::generic>(std::move(event_stream)) {}
-        write<type::generic>(const write<type::generic>&) = delete;
-        write<type::generic>(write<type::generic>&&) = default;
-        write<type::generic>& operator=(const write<type::generic>&) = delete;
-        write<type::generic>& operator=(write<type::generic>&&) = default;
-        virtual ~write<type::generic>() {}
-
-        /// operator() handles an event.
-        virtual void operator()(generic_event generic_event) {
-            _write_to_reference(generic_event);
-        }
-
-        protected:
-        std::unique_ptr<std::ostream> _event_stream;
-        write_to_reference<type::generic> _write_to_reference;
     };
 
     /// dispatch specifies when the events are dispatched by an observable.
@@ -1002,6 +1012,9 @@ namespace sepia {
                                                 initial_t = event.t;
                                                 previous_t = event.t;
                                             }
+                                            if (event.x >= header.width() || event.y >= header.height()) {
+                                                throw coordinates_overflow();
+                                            }
                                             _handle_event(event);
                                         }
                                     }
@@ -1029,6 +1042,9 @@ namespace sepia {
                                             offset_skipped = true;
                                             initial_t = event.t;
                                             previous_t = event.t;
+                                        }
+                                        if (event.x >= header.width() || event.y >= header.height()) {
+                                            throw coordinates_overflow();
                                         }
                                         _handle_event(event);
                                     }
@@ -1071,6 +1087,9 @@ namespace sepia {
                                                 time_reference + std::chrono::microseconds(event.t));
                                         }
                                         previous_t = event.t;
+                                        if (event.x >= header.width() || event.y >= header.height()) {
+                                            throw coordinates_overflow();
+                                        }
                                         _handle_event(event);
                                     }
                                 }
@@ -1084,6 +1103,9 @@ namespace sepia {
                                          byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
+                                            if (event.x >= header.width() || event.y >= header.height()) {
+                                                throw coordinates_overflow();
+                                            }
                                             _handle_event(event);
                                         }
                                     }
@@ -1099,6 +1121,9 @@ namespace sepia {
                                 }
                                 for (auto byte : bytes) {
                                     if (handle_byte(byte, event)) {
+                                        if (event.x >= header.width() || event.y >= header.height()) {
+                                            throw coordinates_overflow();
+                                        }
                                         _handle_event(event);
                                     }
                                 }
@@ -1155,7 +1180,7 @@ namespace sepia {
     /// capture_exception stores an exception pointer and notifies a condition variable.
     class capture_exception {
         public:
-        capture_exception() {}
+        capture_exception() = default;
         capture_exception(const capture_exception&) = delete;
         capture_exception(capture_exception&&) = default;
         capture_exception& operator=(const capture_exception&) = delete;
