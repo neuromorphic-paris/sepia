@@ -612,7 +612,10 @@ namespace sepia {
     template <>
     class handle_byte<type::atis> {
         public:
-        handle_byte<type::atis>(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte<type::atis>(uint16_t width, uint16_t height) :
+            _width(width),
+            _height(height),
+            _state(state::idle) {}
         handle_byte<type::atis>(const handle_byte<type::atis>&) = default;
         handle_byte<type::atis>(handle_byte<type::atis>&&) = default;
         handle_byte<type::atis>& operator=(const handle_byte<type::atis>&) = default;
@@ -681,7 +684,10 @@ namespace sepia {
     template <>
     class handle_byte<type::color> {
         public:
-        handle_byte<type::color>(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte<type::color>(uint16_t width, uint16_t height) :
+            _width(width),
+            _height(height),
+            _state(state::idle) {}
         handle_byte<type::color>(const handle_byte<type::color>&) = default;
         handle_byte<type::color>(handle_byte<type::color>&&) = default;
         handle_byte<type::color>& operator=(const handle_byte<type::color>&) = default;
@@ -778,7 +784,8 @@ namespace sepia {
         write_to_reference<type::generic>(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
-        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) : write_to_reference<type::generic>(event_stream) {}
+        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) :
+            write_to_reference<type::generic>(event_stream) {}
         write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
         write_to_reference<type::generic>(write_to_reference<type::generic>&&) = default;
         write_to_reference<type::generic>& operator=(const write_to_reference<type::generic>&) = delete;
