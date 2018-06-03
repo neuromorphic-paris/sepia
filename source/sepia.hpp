@@ -475,6 +475,7 @@ namespace sepia {
     class handle_byte<type::generic> {
         public:
         handle_byte<type::generic>() : _state(state::idle), _index(0), _bytes_size(0) {}
+        handle_byte<type::generic>(uint16_t, uint16_t) : handle_byte<type::generic>() {}
         handle_byte<type::generic>(const handle_byte<type::generic>&) = default;
         handle_byte<type::generic>(handle_byte<type::generic>&&) = default;
         handle_byte<type::generic>& operator=(const handle_byte<type::generic>&) = default;
@@ -543,7 +544,7 @@ namespace sepia {
     template <>
     class handle_byte<type::dvs> {
         public:
-        handle_byte<type::dvs>() : _state(state::idle) {}
+        handle_byte<type::dvs>(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
         handle_byte<type::dvs>(const handle_byte<type::dvs>&) = default;
         handle_byte<type::dvs>(handle_byte<type::dvs>&&) = default;
         handle_byte<type::dvs>& operator=(const handle_byte<type::dvs>&) = default;
@@ -568,6 +569,9 @@ namespace sepia {
                     return false;
                 case state::byte1:
                     dvs_event.x |= (byte << 8);
+                    if (dvs_event.x >= _width) {
+                        throw coordinates_overflow();
+                    }
                     _state = state::byte2;
                     return false;
                 case state::byte2:
@@ -576,6 +580,9 @@ namespace sepia {
                     return false;
                 case state::byte3:
                     dvs_event.y |= (byte << 8);
+                    if (dvs_event.y >= _height) {
+                        throw coordinates_overflow();
+                    }
                     _state = state::idle;
                     return true;
             }
@@ -596,6 +603,8 @@ namespace sepia {
             byte3,
         };
 
+        const uint16_t _width;
+        const uint16_t _height;
         state _state;
     };
 
@@ -603,7 +612,10 @@ namespace sepia {
     template <>
     class handle_byte<type::atis> {
         public:
-        handle_byte<type::atis>() : _state(state::idle) {}
+        handle_byte<type::atis>(uint16_t width, uint16_t height) :
+            _width(width),
+            _height(height),
+            _state(state::idle) {}
         handle_byte<type::atis>(const handle_byte<type::atis>&) = default;
         handle_byte<type::atis>(handle_byte<type::atis>&&) = default;
         handle_byte<type::atis>& operator=(const handle_byte<type::atis>&) = default;
@@ -629,6 +641,9 @@ namespace sepia {
                     return false;
                 case state::byte1:
                     atis_event.x |= (byte << 8);
+                    if (atis_event.x >= _width) {
+                        throw coordinates_overflow();
+                    }
                     _state = state::byte2;
                     return false;
                 case state::byte2:
@@ -637,6 +652,9 @@ namespace sepia {
                     return false;
                 case state::byte3:
                     atis_event.y |= (byte << 8);
+                    if (atis_event.y >= _height) {
+                        throw coordinates_overflow();
+                    }
                     _state = state::idle;
                     return true;
             }
@@ -657,6 +675,8 @@ namespace sepia {
             byte3,
         };
 
+        const uint16_t _width;
+        const uint16_t _height;
         state _state;
     };
 
@@ -664,7 +684,10 @@ namespace sepia {
     template <>
     class handle_byte<type::color> {
         public:
-        handle_byte<type::color>() : _state(state::idle) {}
+        handle_byte<type::color>(uint16_t width, uint16_t height) :
+            _width(width),
+            _height(height),
+            _state(state::idle) {}
         handle_byte<type::color>(const handle_byte<type::color>&) = default;
         handle_byte<type::color>(handle_byte<type::color>&&) = default;
         handle_byte<type::color>& operator=(const handle_byte<type::color>&) = default;
@@ -690,6 +713,9 @@ namespace sepia {
                 }
                 case state::byte1: {
                     color_event.x |= (byte << 8);
+                    if (color_event.x >= _width) {
+                        throw coordinates_overflow();
+                    }
                     _state = state::byte2;
                     return false;
                 }
@@ -700,6 +726,9 @@ namespace sepia {
                 }
                 case state::byte3: {
                     color_event.y |= (byte << 8);
+                    if (color_event.y >= _height) {
+                        throw coordinates_overflow();
+                    }
                     _state = state::byte4;
                     return false;
                 }
@@ -739,6 +768,8 @@ namespace sepia {
             byte6,
         };
 
+        const uint16_t _width;
+        const uint16_t _height;
         state _state;
     };
 
@@ -753,7 +784,8 @@ namespace sepia {
         write_to_reference<type::generic>(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
-        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) : write_to_reference<type::generic>(event_stream) {}
+        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) :
+            write_to_reference<type::generic>(event_stream) {}
         write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
         write_to_reference<type::generic>(write_to_reference<type::generic>&&) = default;
         write_to_reference<type::generic>& operator=(const write_to_reference<type::generic>&) = delete;
@@ -840,6 +872,8 @@ namespace sepia {
         public:
         write_to_reference<type::atis>(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
+            _width(width),
+            _height(height),
             _previous_t(0) {
             write_header<type::atis>(_event_stream, width, height);
         }
@@ -880,6 +914,8 @@ namespace sepia {
 
         protected:
         std::ostream& _event_stream;
+        const uint16_t _width;
+        const uint16_t _height;
         uint64_t _previous_t;
     };
 
@@ -889,6 +925,8 @@ namespace sepia {
         public:
         write_to_reference<type::color>(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
+            _width(width),
+            _height(height),
             _previous_t(0) {
             write_header<type::color>(_event_stream, width, height);
         }
@@ -927,6 +965,8 @@ namespace sepia {
 
         protected:
         std::ostream& _event_stream;
+        const uint16_t _width;
+        const uint16_t _height;
         uint64_t _previous_t;
     };
 
@@ -982,10 +1022,10 @@ namespace sepia {
             if (header.event_stream_type != event_stream_type) {
                 throw unsupported_event_type();
             }
-            _loop = std::thread([this]() {
+            _loop = std::thread([this, header]() {
                 try {
                     event<event_stream_type> event = {};
-                    handle_byte<event_stream_type> handle_byte;
+                    handle_byte<event_stream_type> handle_byte(header.width, header.height);
                     std::vector<uint8_t> bytes(_chunk_size);
                     switch (_dispatch_events) {
                         case dispatch::synchronously_but_skip_offset: {
@@ -1011,9 +1051,6 @@ namespace sepia {
                                                 offset_skipped = true;
                                                 initial_t = event.t;
                                                 previous_t = event.t;
-                                            }
-                                            if (event.x >= header.width() || event.y >= header.height()) {
-                                                throw coordinates_overflow();
                                             }
                                             _handle_event(event);
                                         }
@@ -1042,9 +1079,6 @@ namespace sepia {
                                             offset_skipped = true;
                                             initial_t = event.t;
                                             previous_t = event.t;
-                                        }
-                                        if (event.x >= header.width() || event.y >= header.height()) {
-                                            throw coordinates_overflow();
                                         }
                                         _handle_event(event);
                                     }
@@ -1087,9 +1121,6 @@ namespace sepia {
                                                 time_reference + std::chrono::microseconds(event.t));
                                         }
                                         previous_t = event.t;
-                                        if (event.x >= header.width() || event.y >= header.height()) {
-                                            throw coordinates_overflow();
-                                        }
                                         _handle_event(event);
                                     }
                                 }
@@ -1103,9 +1134,6 @@ namespace sepia {
                                          byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
-                                            if (event.x >= header.width() || event.y >= header.height()) {
-                                                throw coordinates_overflow();
-                                            }
                                             _handle_event(event);
                                         }
                                     }
@@ -1121,9 +1149,6 @@ namespace sepia {
                                 }
                                 for (auto byte : bytes) {
                                     if (handle_byte(byte, event)) {
-                                        if (event.x >= header.width() || event.y >= header.height()) {
-                                            throw coordinates_overflow();
-                                        }
                                         _handle_event(event);
                                     }
                                 }
