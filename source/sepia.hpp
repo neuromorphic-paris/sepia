@@ -6,7 +6,7 @@
 #define SEPIA_STRINGIFY(characters) #characters
 #define SEPIA_TOSTRING(characters) SEPIA_STRINGIFY(characters)
 #define SEPIA_DIRNAME                                                                                                  \
-    sepia::dirname(__FILE__[0] == '/' ? __FILE__ : TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
+    sepia::dirname(__FILE__[0] == '/' ? __FILE__ : SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
 
 #include <array>
 #include <atomic>
