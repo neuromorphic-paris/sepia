@@ -1,5 +1,12 @@
 #pragma once
 
+#if !defined(COMPILER_WORKING_DIRECTORY)
+#error "COMPILER_WORKING_DIRECTORY must point to the working directory of the compiler"
+#endif
+#define STRINGIFY(characters) #characters
+#define TOSTRING(characters) STRINGIFY(characters)
+#define DIRNAME sepia::dirname(__FILE__[0] == '/' ? __FILE__ : TOSTRING(COMPILER_WORKING_DIRECTORY) "/" __FILE__)
+
 #include <array>
 #include <atomic>
 #include <chrono>

@@ -48,3 +48,5 @@ script:
     - cd build || travis_terminate 1
     - make || travis_terminate 1
     - release/sepia || travis_terminate 1
+    - cd release || travis_terminate 1
+    - ./sepia || travis_terminate 1
