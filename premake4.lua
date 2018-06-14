@@ -8,7 +8,7 @@ solution 'sepia'
         files {'source/*.hpp', 'test/*.cpp'}
         buildoptions {'-std=c++11'}
         linkoptions {'-std=c++11'}
-        defines {'COMPILER_WORKING_DIRECTORY="' .. project().location .. '"'}
+        defines {'SEPIA_COMPILER_WORKING_DIRECTORY="' .. project().location .. '"'}
         configuration 'release'
             targetdir 'build/release'
             defines {'NDEBUG'}

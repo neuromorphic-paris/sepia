@@ -3,7 +3,7 @@
 #include "../third_party/Catch2/single_include/catch.hpp"
 #include <sstream>
 
-const std::string examples = sepia::join({sepia::dirname(DIRNAME), "third_party", "event_stream", "examples"});
+const std::string examples = sepia::join({sepia::dirname(SEPIA_DIRNAME), "third_party", "event_stream", "examples"});
 
 TEST_CASE("read generic header type", "[sepia::read_type]") {
     REQUIRE(
