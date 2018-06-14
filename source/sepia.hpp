@@ -5,11 +5,7 @@
 #endif
 #define STRINGIFY(characters) #characters
 #define TOSTRING(characters) STRINGIFY(characters)
-#if defined(__GNUC__) && !defined(__clang__)
-#define DIRNAME sepia::dirname(TOSTRING(COMPILER_WORKING_DIRECTORY) "/" __FILE__)
-#else
-#define DIRNAME sepia::dirname(__FILE__)
-#endif
+#define DIRNAME sepia::dirname(__FILE__[0] == '/' ? __FILE__ : TOSTRING(COMPILER_WORKING_DIRECTORY) "/" __FILE__)
 
 #include <array>
 #include <atomic>
