@@ -1,12 +1,11 @@
 #pragma once
 
-#if !defined(SEPIA_COMPILER_WORKING_DIRECTORY)
-#error "SEPIA_COMPILER_WORKING_DIRECTORY must point to the working directory of the compiler"
-#endif
+#ifdef SEPIA_COMPILER_WORKING_DIRECTORY
 #define SEPIA_STRINGIFY(characters) #characters
 #define SEPIA_TOSTRING(characters) SEPIA_STRINGIFY(characters)
 #define SEPIA_DIRNAME                                                                                                  \
     sepia::dirname(__FILE__[0] == '/' ? __FILE__ : SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
+#endif
 
 #include <array>
 #include <atomic>
