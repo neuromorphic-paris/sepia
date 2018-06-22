@@ -935,7 +935,9 @@ namespace sepia {
                 relative_t -= number_of_overflows * 0b111111;
             }
             std::array<uint8_t, 5> bytes{
-                static_cast<uint8_t>((relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0)),
+                static_cast<uint8_t>(
+                    (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00)
+                    | (atis_event.is_threshold_crossing ? 1 : 0)),
                 static_cast<uint8_t>(atis_event.x & 0b11111111),
                 static_cast<uint8_t>((atis_event.x & 0b1111111100000000) >> 8),
                 static_cast<uint8_t>(atis_event.y & 0b11111111),
@@ -1073,7 +1075,12 @@ namespace sepia {
                                 _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                                 if (_event_stream->eof()) {
                                     for (auto byte_iterator = bytes.begin();
-                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         byte_iterator
+                                         != std::next(
+                                                bytes.begin(),
+                                                static_cast<std::iterator_traits<
+                                                    std::vector<uint8_t>::iterator>::difference_type>(
+                                                    _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             if (offset_skipped) {
@@ -1128,7 +1135,12 @@ namespace sepia {
                                 _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                                 if (_event_stream->eof()) {
                                     for (auto byte_iterator = bytes.begin();
-                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         byte_iterator
+                                         != std::next(
+                                                bytes.begin(),
+                                                static_cast<std::iterator_traits<
+                                                    std::vector<uint8_t>::iterator>::difference_type>(
+                                                    _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             if (event.t > previous_t) {
@@ -1167,7 +1179,12 @@ namespace sepia {
                                 _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                                 if (_event_stream->eof()) {
                                     for (auto byte_iterator = bytes.begin();
-                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         byte_iterator
+                                         != std::next(
+                                                bytes.begin(),
+                                                static_cast<std::iterator_traits<
+                                                    std::vector<uint8_t>::iterator>::difference_type>(
+                                                    _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             _handle_event(event);
