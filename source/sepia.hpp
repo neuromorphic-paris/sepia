@@ -6,7 +6,7 @@
 #ifdef _WIN32
 #define SEPIA_DIRNAME                                                                                                  \
     sepia::dirname(                                                                                                    \
-        std::string(__FILE__[1]).size() > 1 && __FILE__[1] == ':' ?                                                    \
+        std::string(__FILE__).size() > 1 && __FILE__[1] == ':' ?                                                       \
             __FILE__ :                                                                                                 \
             SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "\\" __FILE__)
 #else
@@ -399,12 +399,14 @@ namespace sepia {
     void write_header(std::ostream& event_stream, uint16_t width, uint16_t height) {
         event_stream.write(event_stream_signature().data(), event_stream_signature().size());
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
-        auto type_byte = static_cast<uint8_t>(event_stream_type);
-        event_stream.put(*reinterpret_cast<char*>(&type_byte));
-        event_stream.put(width & 0b11111111);
-        event_stream.put((width & 0b1111111100000000) >> 8);
-        event_stream.put(height & 0b11111111);
-        event_stream.put((height & 0b1111111100000000) >> 8);
+        std::array<uint8_t, 5> bytes{
+            static_cast<uint8_t>(event_stream_type),
+            static_cast<uint8_t>(width & 0b11111111),
+            static_cast<uint8_t>((width & 0b1111111100000000) >> 8),
+            static_cast<uint8_t>(height & 0b11111111),
+            static_cast<uint8_t>((height & 0b1111111100000000) >> 8),
+        };
+        event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
     }
     template <type event_stream_type, typename = typename std::enable_if<event_stream_type == type::generic>>
     void write_header(std::ostream& event_stream) {
@@ -811,8 +813,7 @@ namespace sepia {
         write_to_reference(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
-        write_to_reference(std::ostream& event_stream, uint16_t, uint16_t) :
-            write_to_reference(event_stream) {}
+        write_to_reference(std::ostream& event_stream, uint16_t, uint16_t) : write_to_reference(event_stream) {}
         write_to_reference(const write_to_reference&) = delete;
         write_to_reference(write_to_reference&&) = default;
         write_to_reference& operator=(const write_to_reference&) = delete;
@@ -828,13 +829,13 @@ namespace sepia {
             if (relative_t >= 0b11111110) {
                 const auto number_of_overflows = relative_t / 0b11111110;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                    _event_stream.put(0b11111111);
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
                 }
                 relative_t -= number_of_overflows * 0b11111110;
             }
-            _event_stream.put(relative_t);
+            _event_stream.put(static_cast<uint8_t>(relative_t));
             for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
-                _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) > 0 ? 1 : 0));
+                _event_stream.put(static_cast<uint8_t>((size & 0b1111111) << 1) | ((size >> 7) > 0 ? 1 : 0));
             }
             _event_stream.write(reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
             _previous_t = generic_event.t;
@@ -874,15 +875,18 @@ namespace sepia {
             if (relative_t >= 0b1111111) {
                 const auto number_of_overflows = relative_t / 0b1111111;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                    _event_stream.put(0b11111111);
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
                 }
                 relative_t -= number_of_overflows * 0b1111111;
             }
-            _event_stream.put((relative_t << 1) | (dvs_event.is_increase ? 1 : 0));
-            _event_stream.put(dvs_event.x & 0b11111111);
-            _event_stream.put((dvs_event.x & 0b1111111100000000) >> 8);
-            _event_stream.put(dvs_event.y & 0b11111111);
-            _event_stream.put((dvs_event.y & 0b1111111100000000) >> 8);
+            std::array<uint8_t, 5> bytes{
+                static_cast<uint8_t>((relative_t << 1) | (dvs_event.is_increase ? 1 : 0)),
+                static_cast<uint8_t>(dvs_event.x & 0b11111111),
+                static_cast<uint8_t>((dvs_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(dvs_event.y & 0b11111111),
+                static_cast<uint8_t>((dvs_event.y & 0b1111111100000000) >> 8),
+            };
+            _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
             _previous_t = dvs_event.t;
         }
 
@@ -922,20 +926,22 @@ namespace sepia {
             if (relative_t >= 0b111111) {
                 const auto number_of_overflows = relative_t / 0b111111;
                 for (std::size_t index = 0; index < number_of_overflows / 0b11; ++index) {
-                    _event_stream.put(0b11111111);
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
                 }
                 const auto number_of_overflows_left = number_of_overflows % 0b11;
                 if (number_of_overflows_left > 0) {
-                    _event_stream.put(0b11111100 | number_of_overflows_left);
+                    _event_stream.put(static_cast<uint8_t>(0b11111100 | number_of_overflows_left));
                 }
                 relative_t -= number_of_overflows * 0b111111;
             }
-            _event_stream.put(
-                (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0));
-            _event_stream.put(atis_event.x & 0b11111111);
-            _event_stream.put((atis_event.x & 0b1111111100000000) >> 8);
-            _event_stream.put(atis_event.y & 0b11111111);
-            _event_stream.put((atis_event.y & 0b1111111100000000) >> 8);
+            std::array<uint8_t, 5> bytes{
+                static_cast<uint8_t>((relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0)),
+                static_cast<uint8_t>(atis_event.x & 0b11111111),
+                static_cast<uint8_t>((atis_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(atis_event.y & 0b11111111),
+                static_cast<uint8_t>((atis_event.y & 0b1111111100000000) >> 8),
+            };
+            _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
             _previous_t = atis_event.t;
         }
 
@@ -979,14 +985,17 @@ namespace sepia {
                 }
                 relative_t -= number_of_overflows * 0b11111110;
             }
-            _event_stream.put(relative_t);
-            _event_stream.put(color_event.x & 0b11111111);
-            _event_stream.put((color_event.x & 0b1111111100000000) >> 8);
-            _event_stream.put(color_event.y & 0b11111111);
-            _event_stream.put((color_event.y & 0b1111111100000000) >> 8);
-            _event_stream.put(color_event.r);
-            _event_stream.put(color_event.g);
-            _event_stream.put(color_event.b);
+            std::array<uint8_t, 8> bytes{
+                static_cast<uint8_t>(relative_t),
+                static_cast<uint8_t>(color_event.x & 0b11111111),
+                static_cast<uint8_t>((color_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(color_event.y & 0b11111111),
+                static_cast<uint8_t>((color_event.y & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(color_event.r),
+                static_cast<uint8_t>(color_event.g),
+                static_cast<uint8_t>(color_event.b),
+            };
+            _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
             _previous_t = color_event.t;
         }
 
