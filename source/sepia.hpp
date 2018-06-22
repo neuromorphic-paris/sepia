@@ -3,8 +3,21 @@
 #ifdef SEPIA_COMPILER_WORKING_DIRECTORY
 #define SEPIA_STRINGIFY(characters) #characters
 #define SEPIA_TOSTRING(characters) SEPIA_STRINGIFY(characters)
+#ifdef _WIN32
+#define SEPIA_DIRNAME                                                                                                  \
+    sepia::dirname(                                                                                                    \
+        std::string(__FILE__[1]).size() > 1 && __FILE__[1] == ':' ?                                                    \
+            __FILE__ :                                                                                                 \
+            SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "\\" __FILE__)
+#else
 #define SEPIA_DIRNAME                                                                                                  \
     sepia::dirname(__FILE__[0] == '/' ? __FILE__ : SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
+#endif
+#endif
+#ifdef _WIN32
+#define SEPIA_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
+#else
+#define SEPIA_PACK(declaration) declaration __attribute__((__packed__))
 #endif
 
 #include <array>
@@ -73,7 +86,7 @@ namespace sepia {
 
     /// dvs_event represents the parameters of a change detection.
     template <>
-    struct event<type::dvs> {
+    SEPIA_PACK(struct event<type::dvs> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -87,12 +100,12 @@ namespace sepia {
 
         /// is_increase is false if the light is decreasing.
         bool is_increase;
-    } __attribute__((packed));
+    });
     using dvs_event = event<type::dvs>;
 
     /// atis_event represents the parameters of a change detection or an exposure measurement.
     template <>
-    struct event<type::atis> {
+    SEPIA_PACK(struct event<type::atis> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -110,12 +123,12 @@ namespace sepia {
         /// change detection: polarity is false if the light is decreasing.
         /// exposure measurement: polarity is false for a first threshold crossing.
         bool polarity;
-    } __attribute__((packed));
+    });
     using atis_event = event<type::atis>;
 
     /// color_event represents the parameters of a color event.
     template <>
-    struct event<type::color> {
+    SEPIA_PACK(struct event<type::color> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -135,11 +148,11 @@ namespace sepia {
 
         /// b represents the blue component of the color.
         uint8_t b;
-    } __attribute__((packed));
+    });
     using color_event = event<type::color>;
 
     /// simple_event represents the parameters of a specialized DVS event.
-    struct simple_event {
+    SEPIA_PACK(struct simple_event {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -150,10 +163,10 @@ namespace sepia {
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases from bottom to top.
         uint16_t y;
-    } __attribute__((packed));
+    });
 
     /// threshold_crossing represents the parameters of a specialized ATIS event.
-    struct threshold_crossing {
+    SEPIA_PACK(struct threshold_crossing {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -167,7 +180,7 @@ namespace sepia {
 
         /// is_second is false if the event is a first threshold crossing.
         bool is_second;
-    } __attribute__((packed));
+    });
 
     /// unreadable_file is thrown when an input file does not exist or is not readable.
     class unreadable_file : public std::runtime_error {
@@ -249,12 +262,19 @@ namespace sepia {
 
     /// dirname returns the directory part of the given path.
     inline std::string dirname(const std::string& path) {
+#ifdef _WIN32
+        const auto separator = '\\';
+        const auto escape = '^';
+#else
+        const auto separator = '/';
+        const auto escape = '\\';
+#endif
         for (std::size_t index = path.size();;) {
-            index = path.find_last_of('/', index);
+            index = path.find_last_of(separator, index);
             if (index == std::string::npos) {
                 return ".";
             }
-            if (index == 0 || path[index - 1] != '\\') {
+            if (index == 0 || path[index - 1] != escape) {
                 return path.substr(0, index);
             }
         }
@@ -263,11 +283,16 @@ namespace sepia {
     /// join concatenates several path components.
     template <typename Iterator>
     std::string join(Iterator begin, Iterator end) {
+#ifdef _WIN32
+        const auto separator = '\\';
+#else
+        const auto separator = '/';
+#endif
         std::string path;
         for (; begin != end; ++begin) {
             path += *begin;
-            if (!path.empty() && begin != std::prev(end) && path.back() != '/') {
-                path.push_back('/');
+            if (!path.empty() && begin != std::prev(end) && path.back() != separator) {
+                path.push_back(separator);
             }
         }
         return path;
