@@ -6,8 +6,6 @@ solution 'sepia'
         language 'C++'
         location 'build'
         files {'source/*.hpp', 'test/*.cpp'}
-        buildoptions {'-std=c++11'}
-        linkoptions {'-std=c++11'}
         defines {'SEPIA_COMPILER_WORKING_DIRECTORY="' .. project().location .. '"'}
         configuration 'release'
             targetdir 'build/release'
@@ -19,3 +17,8 @@ solution 'sepia'
             flags {'Symbols'}
         configuration 'linux'
             links {'pthread'}
+            buildoptions {'-std=c++11'}
+            linkoptions {'-std=c++11'}
+        configuration 'macosx'
+            buildoptions {'-std=c++11'}
+            linkoptions {'-std=c++11'}
