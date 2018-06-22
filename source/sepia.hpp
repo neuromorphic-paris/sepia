@@ -1332,7 +1332,7 @@ namespace sepia {
         /// An error is thrown if the object was constructed with a parameter.
         virtual std::istream& to_json_stream() {
             if (!_is_json_stream) {
-                throw parameter_error("The unvalidated parameter is not a string");
+                throw parameter_error("the unvalidated parameter is not a string");
             }
             return *_json_stream;
         }
@@ -1341,7 +1341,7 @@ namespace sepia {
         /// An error is thrown if the object was constructed with a stream.
         virtual const parameter& to_parameter() const {
             if (_is_json_stream) {
-                throw parameter_error("The unvalidated parameter is not a parameter");
+                throw parameter_error("the unvalidated parameter is not a parameter");
             }
             return *_parameter;
         }
@@ -1432,28 +1432,28 @@ namespace sepia {
         virtual const array_parameter& get_array_parameter(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a list");
+            throw parameter_error("the parameter is not a list");
         }
 
         /// get_boolean is called by a parent parameter when accessing a boolean value.
         virtual bool get_boolean(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a boolean");
+            throw parameter_error("the parameter is not a boolean");
         }
 
         /// get_number is called by a parent parameter when accessing a numeric value.
         virtual double get_number(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a number");
+            throw parameter_error("the parameter is not a number");
         }
 
         /// get_string is called by a parent parameter when accessing a string value.
         virtual std::string get_string(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a string");
+            throw parameter_error("the parameter is not a string");
         }
 
         /// clone generates a copy of the parameter.
@@ -1772,12 +1772,12 @@ namespace sepia {
                 const auto& casted_object_parameter = dynamic_cast<const object_parameter&>(parameter);
                 for (const auto& key_and_parameter : casted_object_parameter) {
                     if (_parameter_by_key.find(key_and_parameter.first) == _parameter_by_key.end()) {
-                        throw std::runtime_error("Unexpected key " + key_and_parameter.first);
+                        throw std::runtime_error("unexpected key " + key_and_parameter.first);
                     }
                     _parameter_by_key[key_and_parameter.first]->load(*key_and_parameter.second);
                 }
-            } catch (const std::bad_cast& exception) {
-                throw std::logic_error("Expected an object_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const std::bad_cast&) {
+                throw std::logic_error("expected an object_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -1900,8 +1900,8 @@ namespace sepia {
                     new_parameter->load(*stored_parameter);
                     _parameters.push_back(std::move(new_parameter));
                 }
-            } catch (const std::bad_cast& exception) {
-                throw std::logic_error("Expected an array_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const std::bad_cast&) {
+                throw std::logic_error("expected an array_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -1968,8 +1968,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_boolean({});
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected a boolean_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected a boolean_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -2017,8 +2017,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_number();
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected a number_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected a number_parameter, got a " + std::string(typeid(parameter).name()));
             }
             validate();
         }
@@ -2089,8 +2089,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_string({});
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected a string_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected a string_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -2130,8 +2130,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_string({});
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected an enum_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected an enum_parameter, got a " + std::string(typeid(parameter).name()));
             }
             validate();
         }
@@ -2148,7 +2148,7 @@ namespace sepia {
                     available_values_string += available_value;
                 }
                 available_values_string += "}";
-                throw parameter_error("The value " + _value + " should be one of " + available_values_string);
+                throw parameter_error("the value " + _value + " should be one of " + available_values_string);
             }
         }
 
