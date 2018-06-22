@@ -22,6 +22,7 @@
 
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -303,7 +304,7 @@ namespace sepia {
 
     /// filename_to_ifstream creates a readable stream from a file.
     inline std::unique_ptr<std::ifstream> filename_to_ifstream(const std::string& filename) {
-        auto stream = make_unique<std::ifstream>(filename);
+        auto stream = sepia::make_unique<std::ifstream>(filename);
         if (!stream->good()) {
             throw unreadable_file(filename);
         }
@@ -312,7 +313,7 @@ namespace sepia {
 
     /// filename_to_ofstream creates a writable stream from a file.
     inline std::unique_ptr<std::ofstream> filename_to_ofstream(const std::string& filename) {
-        auto stream = make_unique<std::ofstream>(filename);
+        auto stream = sepia::make_unique<std::ofstream>(filename);
         if (!stream->good()) {
             throw unwritable_file(filename);
         }
@@ -506,13 +507,13 @@ namespace sepia {
     template <>
     class handle_byte<type::generic> {
         public:
-        handle_byte<type::generic>() : _state(state::idle), _index(0), _bytes_size(0) {}
-        handle_byte<type::generic>(uint16_t, uint16_t) : handle_byte<type::generic>() {}
-        handle_byte<type::generic>(const handle_byte<type::generic>&) = default;
-        handle_byte<type::generic>(handle_byte<type::generic>&&) = default;
-        handle_byte<type::generic>& operator=(const handle_byte<type::generic>&) = default;
-        handle_byte<type::generic>& operator=(handle_byte<type::generic>&&) = default;
-        virtual ~handle_byte<type::generic>() {}
+        handle_byte() : _state(state::idle), _index(0), _bytes_size(0) {}
+        handle_byte(uint16_t, uint16_t) : handle_byte() {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, generic_event& generic_event) {
@@ -576,12 +577,12 @@ namespace sepia {
     template <>
     class handle_byte<type::dvs> {
         public:
-        handle_byte<type::dvs>(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
-        handle_byte<type::dvs>(const handle_byte<type::dvs>&) = default;
-        handle_byte<type::dvs>(handle_byte<type::dvs>&&) = default;
-        handle_byte<type::dvs>& operator=(const handle_byte<type::dvs>&) = default;
-        handle_byte<type::dvs>& operator=(handle_byte<type::dvs>&&) = default;
-        virtual ~handle_byte<type::dvs>() {}
+        handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, dvs_event& dvs_event) {
@@ -644,15 +645,12 @@ namespace sepia {
     template <>
     class handle_byte<type::atis> {
         public:
-        handle_byte<type::atis>(uint16_t width, uint16_t height) :
-            _width(width),
-            _height(height),
-            _state(state::idle) {}
-        handle_byte<type::atis>(const handle_byte<type::atis>&) = default;
-        handle_byte<type::atis>(handle_byte<type::atis>&&) = default;
-        handle_byte<type::atis>& operator=(const handle_byte<type::atis>&) = default;
-        handle_byte<type::atis>& operator=(handle_byte<type::atis>&&) = default;
-        virtual ~handle_byte<type::atis>() {}
+        handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, atis_event& atis_event) {
@@ -716,15 +714,12 @@ namespace sepia {
     template <>
     class handle_byte<type::color> {
         public:
-        handle_byte<type::color>(uint16_t width, uint16_t height) :
-            _width(width),
-            _height(height),
-            _state(state::idle) {}
-        handle_byte<type::color>(const handle_byte<type::color>&) = default;
-        handle_byte<type::color>(handle_byte<type::color>&&) = default;
-        handle_byte<type::color>& operator=(const handle_byte<type::color>&) = default;
-        handle_byte<type::color>& operator=(handle_byte<type::color>&&) = default;
-        virtual ~handle_byte<type::color>() {}
+        handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, color_event& color_event) {
@@ -813,16 +808,16 @@ namespace sepia {
     template <>
     class write_to_reference<type::generic> {
         public:
-        write_to_reference<type::generic>(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
+        write_to_reference(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
-        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) :
-            write_to_reference<type::generic>(event_stream) {}
-        write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
-        write_to_reference<type::generic>(write_to_reference<type::generic>&&) = default;
-        write_to_reference<type::generic>& operator=(const write_to_reference<type::generic>&) = delete;
-        write_to_reference<type::generic>& operator=(write_to_reference<type::generic>&&) = default;
-        virtual ~write_to_reference<type::generic>() {}
+        write_to_reference(std::ostream& event_stream, uint16_t, uint16_t) :
+            write_to_reference(event_stream) {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(generic_event generic_event) {
@@ -854,18 +849,18 @@ namespace sepia {
     template <>
     class write_to_reference<type::dvs> {
         public:
-        write_to_reference<type::dvs>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+        write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
             _width(width),
             _height(height),
             _previous_t(0) {
             write_header<type::dvs>(_event_stream, width, height);
         }
-        write_to_reference<type::dvs>(const write_to_reference<type::dvs>&) = delete;
-        write_to_reference<type::dvs>(write_to_reference<type::dvs>&&) = default;
-        write_to_reference<type::dvs>& operator=(const write_to_reference<type::dvs>&) = delete;
-        write_to_reference<type::dvs>& operator=(write_to_reference<type::dvs>&&) = default;
-        virtual ~write_to_reference<type::dvs>() {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(dvs_event dvs_event) {
@@ -902,18 +897,18 @@ namespace sepia {
     template <>
     class write_to_reference<type::atis> {
         public:
-        write_to_reference<type::atis>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+        write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
             _width(width),
             _height(height),
             _previous_t(0) {
             write_header<type::atis>(_event_stream, width, height);
         }
-        write_to_reference<type::atis>(const write_to_reference<type::atis>&) = delete;
-        write_to_reference<type::atis>(write_to_reference<type::atis>&&) = default;
-        write_to_reference<type::atis>& operator=(const write_to_reference<type::atis>&) = delete;
-        write_to_reference<type::atis>& operator=(write_to_reference<type::atis>&&) = default;
-        virtual ~write_to_reference<type::atis>() {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(atis_event atis_event) {
@@ -955,18 +950,18 @@ namespace sepia {
     template <>
     class write_to_reference<type::color> {
         public:
-        write_to_reference<type::color>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+        write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
             _width(width),
             _height(height),
             _previous_t(0) {
             write_header<type::color>(_event_stream, width, height);
         }
-        write_to_reference<type::color>(const write_to_reference<type::color>&) = delete;
-        write_to_reference<type::color>(write_to_reference<type::color>&&) = default;
-        write_to_reference<type::color>& operator=(const write_to_reference<type::color>&) = delete;
-        write_to_reference<type::color>& operator=(write_to_reference<type::color>&&) = default;
-        virtual ~write_to_reference<type::color>() {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(color_event color_event) {
