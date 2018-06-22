@@ -1131,6 +1131,7 @@ namespace sepia {
                                     }
                                 }
                             }
+                            break;
                         }
                         case dispatch::synchronously: {
                             auto time_reference = std::chrono::system_clock::now();
@@ -1177,6 +1178,7 @@ namespace sepia {
                                     }
                                 }
                             }
+                            break;
                         }
                         case dispatch::as_fast_as_possible: {
                             while (_running.load(std::memory_order_relaxed)) {
@@ -1211,6 +1213,7 @@ namespace sepia {
                                 }
                             }
                         }
+                        break;
                     }
                 } catch (...) {
                     _handle_exception(std::current_exception());
