@@ -527,7 +527,7 @@ namespace sepia {
                         generic_event.t += byte;
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 case state::byte0:
                     _bytes_size |= ((byte >> 1) << (7 * _index));
                     if ((byte & 1) == 0) {
@@ -542,7 +542,7 @@ namespace sepia {
                     } else {
                         ++_index;
                     }
-                    return false;
+                    break;
                 case state::size_byte:
                     generic_event.bytes.push_back(byte);
                     if (generic_event.bytes.size() == _bytes_size) {
@@ -551,8 +551,9 @@ namespace sepia {
                         _bytes_size = 0;
                         return true;
                     }
-                    return false;
+                    break;
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -597,22 +598,22 @@ namespace sepia {
                         dvs_event.is_increase = ((byte & 1) == 1);
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 case state::byte0:
                     dvs_event.x = byte;
                     _state = state::byte1;
-                    return false;
+                    break;
                 case state::byte1:
                     dvs_event.x |= (byte << 8);
                     if (dvs_event.x >= _width) {
                         throw coordinates_overflow();
                     }
                     _state = state::byte2;
-                    return false;
+                    break;
                 case state::byte2:
                     dvs_event.y = byte;
                     _state = state::byte3;
-                    return false;
+                    break;
                 case state::byte3:
                     dvs_event.y |= (byte << 8);
                     if (dvs_event.y >= _height) {
@@ -621,6 +622,7 @@ namespace sepia {
                     _state = state::idle;
                     return true;
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -666,22 +668,22 @@ namespace sepia {
                         atis_event.polarity = ((byte & 0b10) == 0b10);
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 case state::byte0:
                     atis_event.x = byte;
                     _state = state::byte1;
-                    return false;
+                    break;
                 case state::byte1:
                     atis_event.x |= (byte << 8);
                     if (atis_event.x >= _width) {
                         throw coordinates_overflow();
                     }
                     _state = state::byte2;
-                    return false;
+                    break;
                 case state::byte2:
                     atis_event.y = byte;
                     _state = state::byte3;
-                    return false;
+                    break;
                 case state::byte3:
                     atis_event.y |= (byte << 8);
                     if (atis_event.y >= _height) {
@@ -690,6 +692,7 @@ namespace sepia {
                     _state = state::idle;
                     return true;
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -733,12 +736,12 @@ namespace sepia {
                         color_event.t += byte;
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 }
                 case state::byte0: {
                     color_event.x = byte;
                     _state = state::byte1;
-                    return false;
+                    break;
                 }
                 case state::byte1: {
                     color_event.x |= (byte << 8);
@@ -746,12 +749,12 @@ namespace sepia {
                         throw coordinates_overflow();
                     }
                     _state = state::byte2;
-                    return false;
+                    break;
                 }
                 case state::byte2: {
                     color_event.y = byte;
                     _state = state::byte3;
-                    return false;
+                    break;
                 }
                 case state::byte3: {
                     color_event.y |= (byte << 8);
@@ -759,17 +762,17 @@ namespace sepia {
                         throw coordinates_overflow();
                     }
                     _state = state::byte4;
-                    return false;
+                    break;
                 }
                 case state::byte4: {
                     color_event.r = byte;
                     _state = state::byte5;
-                    return false;
+                    break;
                 }
                 case state::byte5: {
                     color_event.g = byte;
                     _state = state::byte6;
-                    return false;
+                    break;
                 }
                 case state::byte6: {
                     color_event.b = byte;
@@ -777,6 +780,7 @@ namespace sepia {
                     return true;
                 }
             }
+            return false;
         }
 
         /// reset initializes the state machine.
