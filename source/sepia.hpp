@@ -3,12 +3,26 @@
 #ifdef SEPIA_COMPILER_WORKING_DIRECTORY
 #define SEPIA_STRINGIFY(characters) #characters
 #define SEPIA_TOSTRING(characters) SEPIA_STRINGIFY(characters)
+#ifdef _WIN32
+#define SEPIA_DIRNAME                                                                                                  \
+    sepia::dirname(                                                                                                    \
+        std::string(__FILE__).size() > 1 && __FILE__[1] == ':' ?                                                       \
+            __FILE__ :                                                                                                 \
+            SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "\\" __FILE__)
+#else
 #define SEPIA_DIRNAME                                                                                                  \
     sepia::dirname(__FILE__[0] == '/' ? __FILE__ : SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
+#endif
+#endif
+#ifdef _WIN32
+#define SEPIA_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
+#else
+#define SEPIA_PACK(declaration) declaration __attribute__((__packed__))
 #endif
 
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -73,7 +87,7 @@ namespace sepia {
 
     /// dvs_event represents the parameters of a change detection.
     template <>
-    struct event<type::dvs> {
+    SEPIA_PACK(struct event<type::dvs> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -87,12 +101,12 @@ namespace sepia {
 
         /// is_increase is false if the light is decreasing.
         bool is_increase;
-    } __attribute__((packed));
+    });
     using dvs_event = event<type::dvs>;
 
     /// atis_event represents the parameters of a change detection or an exposure measurement.
     template <>
-    struct event<type::atis> {
+    SEPIA_PACK(struct event<type::atis> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -110,12 +124,12 @@ namespace sepia {
         /// change detection: polarity is false if the light is decreasing.
         /// exposure measurement: polarity is false for a first threshold crossing.
         bool polarity;
-    } __attribute__((packed));
+    });
     using atis_event = event<type::atis>;
 
     /// color_event represents the parameters of a color event.
     template <>
-    struct event<type::color> {
+    SEPIA_PACK(struct event<type::color> {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -135,11 +149,11 @@ namespace sepia {
 
         /// b represents the blue component of the color.
         uint8_t b;
-    } __attribute__((packed));
+    });
     using color_event = event<type::color>;
 
     /// simple_event represents the parameters of a specialized DVS event.
-    struct simple_event {
+    SEPIA_PACK(struct simple_event {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -150,10 +164,10 @@ namespace sepia {
         /// y represents the coordinate of the event on the sensor grid alongside the vertical axis.
         /// y is 0 on the bottom, and increases from bottom to top.
         uint16_t y;
-    } __attribute__((packed));
+    });
 
     /// threshold_crossing represents the parameters of a specialized ATIS event.
-    struct threshold_crossing {
+    SEPIA_PACK(struct threshold_crossing {
         /// t represents the event's timestamp.
         uint64_t t;
 
@@ -167,7 +181,7 @@ namespace sepia {
 
         /// is_second is false if the event is a first threshold crossing.
         bool is_second;
-    } __attribute__((packed));
+    });
 
     /// unreadable_file is thrown when an input file does not exist or is not readable.
     class unreadable_file : public std::runtime_error {
@@ -249,12 +263,19 @@ namespace sepia {
 
     /// dirname returns the directory part of the given path.
     inline std::string dirname(const std::string& path) {
+#ifdef _WIN32
+        const auto separator = '\\';
+        const auto escape = '^';
+#else
+        const auto separator = '/';
+        const auto escape = '\\';
+#endif
         for (std::size_t index = path.size();;) {
-            index = path.find_last_of('/', index);
+            index = path.find_last_of(separator, index);
             if (index == std::string::npos) {
                 return ".";
             }
-            if (index == 0 || path[index - 1] != '\\') {
+            if (index == 0 || path[index - 1] != escape) {
                 return path.substr(0, index);
             }
         }
@@ -263,11 +284,16 @@ namespace sepia {
     /// join concatenates several path components.
     template <typename Iterator>
     std::string join(Iterator begin, Iterator end) {
+#ifdef _WIN32
+        const auto separator = '\\';
+#else
+        const auto separator = '/';
+#endif
         std::string path;
         for (; begin != end; ++begin) {
             path += *begin;
-            if (!path.empty() && begin != std::prev(end) && path.back() != '/') {
-                path.push_back('/');
+            if (!path.empty() && begin != std::prev(end) && path.back() != separator) {
+                path.push_back(separator);
             }
         }
         return path;
@@ -278,7 +304,7 @@ namespace sepia {
 
     /// filename_to_ifstream creates a readable stream from a file.
     inline std::unique_ptr<std::ifstream> filename_to_ifstream(const std::string& filename) {
-        auto stream = make_unique<std::ifstream>(filename);
+        auto stream = sepia::make_unique<std::ifstream>(filename, std::ifstream::in | std::ifstream::binary);
         if (!stream->good()) {
             throw unreadable_file(filename);
         }
@@ -287,7 +313,7 @@ namespace sepia {
 
     /// filename_to_ofstream creates a writable stream from a file.
     inline std::unique_ptr<std::ofstream> filename_to_ofstream(const std::string& filename) {
-        auto stream = make_unique<std::ofstream>(filename);
+        auto stream = sepia::make_unique<std::ofstream>(filename, std::ofstream::out | std::ofstream::binary);
         if (!stream->good()) {
             throw unwritable_file(filename);
         }
@@ -373,12 +399,14 @@ namespace sepia {
     void write_header(std::ostream& event_stream, uint16_t width, uint16_t height) {
         event_stream.write(event_stream_signature().data(), event_stream_signature().size());
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
-        auto type_byte = static_cast<uint8_t>(event_stream_type);
-        event_stream.put(*reinterpret_cast<char*>(&type_byte));
-        event_stream.put(width & 0b11111111);
-        event_stream.put((width & 0b1111111100000000) >> 8);
-        event_stream.put(height & 0b11111111);
-        event_stream.put((height & 0b1111111100000000) >> 8);
+        std::array<uint8_t, 5> bytes{
+            static_cast<uint8_t>(event_stream_type),
+            static_cast<uint8_t>(width & 0b11111111),
+            static_cast<uint8_t>((width & 0b1111111100000000) >> 8),
+            static_cast<uint8_t>(height & 0b11111111),
+            static_cast<uint8_t>((height & 0b1111111100000000) >> 8),
+        };
+        event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
     }
     template <type event_stream_type, typename = typename std::enable_if<event_stream_type == type::generic>>
     void write_header(std::ostream& event_stream) {
@@ -481,13 +509,13 @@ namespace sepia {
     template <>
     class handle_byte<type::generic> {
         public:
-        handle_byte<type::generic>() : _state(state::idle), _index(0), _bytes_size(0) {}
-        handle_byte<type::generic>(uint16_t, uint16_t) : handle_byte<type::generic>() {}
-        handle_byte<type::generic>(const handle_byte<type::generic>&) = default;
-        handle_byte<type::generic>(handle_byte<type::generic>&&) = default;
-        handle_byte<type::generic>& operator=(const handle_byte<type::generic>&) = default;
-        handle_byte<type::generic>& operator=(handle_byte<type::generic>&&) = default;
-        virtual ~handle_byte<type::generic>() {}
+        handle_byte() : _state(state::idle), _index(0), _bytes_size(0) {}
+        handle_byte(uint16_t, uint16_t) : handle_byte() {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, generic_event& generic_event) {
@@ -499,7 +527,7 @@ namespace sepia {
                         generic_event.t += byte;
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 case state::byte0:
                     _bytes_size |= ((byte >> 1) << (7 * _index));
                     if ((byte & 1) == 0) {
@@ -514,7 +542,7 @@ namespace sepia {
                     } else {
                         ++_index;
                     }
-                    return false;
+                    break;
                 case state::size_byte:
                     generic_event.bytes.push_back(byte);
                     if (generic_event.bytes.size() == _bytes_size) {
@@ -523,8 +551,9 @@ namespace sepia {
                         _bytes_size = 0;
                         return true;
                     }
-                    return false;
+                    break;
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -551,12 +580,12 @@ namespace sepia {
     template <>
     class handle_byte<type::dvs> {
         public:
-        handle_byte<type::dvs>(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
-        handle_byte<type::dvs>(const handle_byte<type::dvs>&) = default;
-        handle_byte<type::dvs>(handle_byte<type::dvs>&&) = default;
-        handle_byte<type::dvs>& operator=(const handle_byte<type::dvs>&) = default;
-        handle_byte<type::dvs>& operator=(handle_byte<type::dvs>&&) = default;
-        virtual ~handle_byte<type::dvs>() {}
+        handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, dvs_event& dvs_event) {
@@ -569,22 +598,22 @@ namespace sepia {
                         dvs_event.is_increase = ((byte & 1) == 1);
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 case state::byte0:
                     dvs_event.x = byte;
                     _state = state::byte1;
-                    return false;
+                    break;
                 case state::byte1:
                     dvs_event.x |= (byte << 8);
                     if (dvs_event.x >= _width) {
                         throw coordinates_overflow();
                     }
                     _state = state::byte2;
-                    return false;
+                    break;
                 case state::byte2:
                     dvs_event.y = byte;
                     _state = state::byte3;
-                    return false;
+                    break;
                 case state::byte3:
                     dvs_event.y |= (byte << 8);
                     if (dvs_event.y >= _height) {
@@ -593,6 +622,7 @@ namespace sepia {
                     _state = state::idle;
                     return true;
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -619,15 +649,12 @@ namespace sepia {
     template <>
     class handle_byte<type::atis> {
         public:
-        handle_byte<type::atis>(uint16_t width, uint16_t height) :
-            _width(width),
-            _height(height),
-            _state(state::idle) {}
-        handle_byte<type::atis>(const handle_byte<type::atis>&) = default;
-        handle_byte<type::atis>(handle_byte<type::atis>&&) = default;
-        handle_byte<type::atis>& operator=(const handle_byte<type::atis>&) = default;
-        handle_byte<type::atis>& operator=(handle_byte<type::atis>&&) = default;
-        virtual ~handle_byte<type::atis>() {}
+        handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, atis_event& atis_event) {
@@ -641,22 +668,22 @@ namespace sepia {
                         atis_event.polarity = ((byte & 0b10) == 0b10);
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 case state::byte0:
                     atis_event.x = byte;
                     _state = state::byte1;
-                    return false;
+                    break;
                 case state::byte1:
                     atis_event.x |= (byte << 8);
                     if (atis_event.x >= _width) {
                         throw coordinates_overflow();
                     }
                     _state = state::byte2;
-                    return false;
+                    break;
                 case state::byte2:
                     atis_event.y = byte;
                     _state = state::byte3;
-                    return false;
+                    break;
                 case state::byte3:
                     atis_event.y |= (byte << 8);
                     if (atis_event.y >= _height) {
@@ -665,6 +692,7 @@ namespace sepia {
                     _state = state::idle;
                     return true;
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -691,15 +719,12 @@ namespace sepia {
     template <>
     class handle_byte<type::color> {
         public:
-        handle_byte<type::color>(uint16_t width, uint16_t height) :
-            _width(width),
-            _height(height),
-            _state(state::idle) {}
-        handle_byte<type::color>(const handle_byte<type::color>&) = default;
-        handle_byte<type::color>(handle_byte<type::color>&&) = default;
-        handle_byte<type::color>& operator=(const handle_byte<type::color>&) = default;
-        handle_byte<type::color>& operator=(handle_byte<type::color>&&) = default;
-        virtual ~handle_byte<type::color>() {}
+        handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
+        handle_byte(const handle_byte&) = default;
+        handle_byte(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = default;
+        handle_byte& operator=(handle_byte&&) = default;
+        virtual ~handle_byte() {}
 
         /// operator() handles a byte.
         virtual bool operator()(uint8_t byte, color_event& color_event) {
@@ -711,12 +736,12 @@ namespace sepia {
                         color_event.t += byte;
                         _state = state::byte0;
                     }
-                    return false;
+                    break;
                 }
                 case state::byte0: {
                     color_event.x = byte;
                     _state = state::byte1;
-                    return false;
+                    break;
                 }
                 case state::byte1: {
                     color_event.x |= (byte << 8);
@@ -724,12 +749,12 @@ namespace sepia {
                         throw coordinates_overflow();
                     }
                     _state = state::byte2;
-                    return false;
+                    break;
                 }
                 case state::byte2: {
                     color_event.y = byte;
                     _state = state::byte3;
-                    return false;
+                    break;
                 }
                 case state::byte3: {
                     color_event.y |= (byte << 8);
@@ -737,17 +762,17 @@ namespace sepia {
                         throw coordinates_overflow();
                     }
                     _state = state::byte4;
-                    return false;
+                    break;
                 }
                 case state::byte4: {
                     color_event.r = byte;
                     _state = state::byte5;
-                    return false;
+                    break;
                 }
                 case state::byte5: {
                     color_event.g = byte;
                     _state = state::byte6;
-                    return false;
+                    break;
                 }
                 case state::byte6: {
                     color_event.b = byte;
@@ -755,6 +780,7 @@ namespace sepia {
                     return true;
                 }
             }
+            return false;
         }
 
         /// reset initializes the state machine.
@@ -788,16 +814,15 @@ namespace sepia {
     template <>
     class write_to_reference<type::generic> {
         public:
-        write_to_reference<type::generic>(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
+        write_to_reference(std::ostream& event_stream) : _event_stream(event_stream), _previous_t(0) {
             write_header<type::generic>(_event_stream);
         }
-        write_to_reference<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) :
-            write_to_reference<type::generic>(event_stream) {}
-        write_to_reference<type::generic>(const write_to_reference<type::generic>&) = delete;
-        write_to_reference<type::generic>(write_to_reference<type::generic>&&) = default;
-        write_to_reference<type::generic>& operator=(const write_to_reference<type::generic>&) = delete;
-        write_to_reference<type::generic>& operator=(write_to_reference<type::generic>&&) = default;
-        virtual ~write_to_reference<type::generic>() {}
+        write_to_reference(std::ostream& event_stream, uint16_t, uint16_t) : write_to_reference(event_stream) {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(generic_event generic_event) {
@@ -808,13 +833,13 @@ namespace sepia {
             if (relative_t >= 0b11111110) {
                 const auto number_of_overflows = relative_t / 0b11111110;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                    _event_stream.put(0b11111111);
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
                 }
                 relative_t -= number_of_overflows * 0b11111110;
             }
-            _event_stream.put(relative_t);
+            _event_stream.put(static_cast<uint8_t>(relative_t));
             for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
-                _event_stream.put(((size & 0b1111111) << 1) | ((size >> 7) > 0 ? 1 : 0));
+                _event_stream.put(static_cast<uint8_t>((size & 0b1111111) << 1) | ((size >> 7) > 0 ? 1 : 0));
             }
             _event_stream.write(reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
             _previous_t = generic_event.t;
@@ -829,18 +854,18 @@ namespace sepia {
     template <>
     class write_to_reference<type::dvs> {
         public:
-        write_to_reference<type::dvs>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+        write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
             _width(width),
             _height(height),
             _previous_t(0) {
             write_header<type::dvs>(_event_stream, width, height);
         }
-        write_to_reference<type::dvs>(const write_to_reference<type::dvs>&) = delete;
-        write_to_reference<type::dvs>(write_to_reference<type::dvs>&&) = default;
-        write_to_reference<type::dvs>& operator=(const write_to_reference<type::dvs>&) = delete;
-        write_to_reference<type::dvs>& operator=(write_to_reference<type::dvs>&&) = default;
-        virtual ~write_to_reference<type::dvs>() {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(dvs_event dvs_event) {
@@ -854,15 +879,18 @@ namespace sepia {
             if (relative_t >= 0b1111111) {
                 const auto number_of_overflows = relative_t / 0b1111111;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
-                    _event_stream.put(0b11111111);
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
                 }
                 relative_t -= number_of_overflows * 0b1111111;
             }
-            _event_stream.put((relative_t << 1) | (dvs_event.is_increase ? 1 : 0));
-            _event_stream.put(dvs_event.x & 0b11111111);
-            _event_stream.put((dvs_event.x & 0b1111111100000000) >> 8);
-            _event_stream.put(dvs_event.y & 0b11111111);
-            _event_stream.put((dvs_event.y & 0b1111111100000000) >> 8);
+            std::array<uint8_t, 5> bytes{
+                static_cast<uint8_t>((relative_t << 1) | (dvs_event.is_increase ? 1 : 0)),
+                static_cast<uint8_t>(dvs_event.x & 0b11111111),
+                static_cast<uint8_t>((dvs_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(dvs_event.y & 0b11111111),
+                static_cast<uint8_t>((dvs_event.y & 0b1111111100000000) >> 8),
+            };
+            _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
             _previous_t = dvs_event.t;
         }
 
@@ -877,18 +905,18 @@ namespace sepia {
     template <>
     class write_to_reference<type::atis> {
         public:
-        write_to_reference<type::atis>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+        write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
             _width(width),
             _height(height),
             _previous_t(0) {
             write_header<type::atis>(_event_stream, width, height);
         }
-        write_to_reference<type::atis>(const write_to_reference<type::atis>&) = delete;
-        write_to_reference<type::atis>(write_to_reference<type::atis>&&) = default;
-        write_to_reference<type::atis>& operator=(const write_to_reference<type::atis>&) = delete;
-        write_to_reference<type::atis>& operator=(write_to_reference<type::atis>&&) = default;
-        virtual ~write_to_reference<type::atis>() {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(atis_event atis_event) {
@@ -902,20 +930,24 @@ namespace sepia {
             if (relative_t >= 0b111111) {
                 const auto number_of_overflows = relative_t / 0b111111;
                 for (std::size_t index = 0; index < number_of_overflows / 0b11; ++index) {
-                    _event_stream.put(0b11111111);
+                    _event_stream.put(static_cast<uint8_t>(0b11111111));
                 }
                 const auto number_of_overflows_left = number_of_overflows % 0b11;
                 if (number_of_overflows_left > 0) {
-                    _event_stream.put(0b11111100 | number_of_overflows_left);
+                    _event_stream.put(static_cast<uint8_t>(0b11111100 | number_of_overflows_left));
                 }
                 relative_t -= number_of_overflows * 0b111111;
             }
-            _event_stream.put(
-                (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00) | (atis_event.is_threshold_crossing ? 1 : 0));
-            _event_stream.put(atis_event.x & 0b11111111);
-            _event_stream.put((atis_event.x & 0b1111111100000000) >> 8);
-            _event_stream.put(atis_event.y & 0b11111111);
-            _event_stream.put((atis_event.y & 0b1111111100000000) >> 8);
+            std::array<uint8_t, 5> bytes{
+                static_cast<uint8_t>(
+                    (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00)
+                    | (atis_event.is_threshold_crossing ? 1 : 0)),
+                static_cast<uint8_t>(atis_event.x & 0b11111111),
+                static_cast<uint8_t>((atis_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(atis_event.y & 0b11111111),
+                static_cast<uint8_t>((atis_event.y & 0b1111111100000000) >> 8),
+            };
+            _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
             _previous_t = atis_event.t;
         }
 
@@ -930,18 +962,18 @@ namespace sepia {
     template <>
     class write_to_reference<type::color> {
         public:
-        write_to_reference<type::color>(std::ostream& event_stream, uint16_t width, uint16_t height) :
+        write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
             _event_stream(event_stream),
             _width(width),
             _height(height),
             _previous_t(0) {
             write_header<type::color>(_event_stream, width, height);
         }
-        write_to_reference<type::color>(const write_to_reference<type::color>&) = delete;
-        write_to_reference<type::color>(write_to_reference<type::color>&&) = default;
-        write_to_reference<type::color>& operator=(const write_to_reference<type::color>&) = delete;
-        write_to_reference<type::color>& operator=(write_to_reference<type::color>&&) = default;
-        virtual ~write_to_reference<type::color>() {}
+        write_to_reference(const write_to_reference&) = delete;
+        write_to_reference(write_to_reference&&) = default;
+        write_to_reference& operator=(const write_to_reference&) = delete;
+        write_to_reference& operator=(write_to_reference&&) = default;
+        virtual ~write_to_reference() {}
 
         /// operator() handles an event.
         virtual void operator()(color_event color_event) {
@@ -959,14 +991,17 @@ namespace sepia {
                 }
                 relative_t -= number_of_overflows * 0b11111110;
             }
-            _event_stream.put(relative_t);
-            _event_stream.put(color_event.x & 0b11111111);
-            _event_stream.put((color_event.x & 0b1111111100000000) >> 8);
-            _event_stream.put(color_event.y & 0b11111111);
-            _event_stream.put((color_event.y & 0b1111111100000000) >> 8);
-            _event_stream.put(color_event.r);
-            _event_stream.put(color_event.g);
-            _event_stream.put(color_event.b);
+            std::array<uint8_t, 8> bytes{
+                static_cast<uint8_t>(relative_t),
+                static_cast<uint8_t>(color_event.x & 0b11111111),
+                static_cast<uint8_t>((color_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(color_event.y & 0b11111111),
+                static_cast<uint8_t>((color_event.y & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(color_event.r),
+                static_cast<uint8_t>(color_event.g),
+                static_cast<uint8_t>(color_event.b),
+            };
+            _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
             _previous_t = color_event.t;
         }
 
@@ -1044,7 +1079,12 @@ namespace sepia {
                                 _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                                 if (_event_stream->eof()) {
                                     for (auto byte_iterator = bytes.begin();
-                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         byte_iterator
+                                         != std::next(
+                                                bytes.begin(),
+                                                static_cast<std::iterator_traits<
+                                                    std::vector<uint8_t>::iterator>::difference_type>(
+                                                    _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             if (offset_skipped) {
@@ -1091,6 +1131,7 @@ namespace sepia {
                                     }
                                 }
                             }
+                            break;
                         }
                         case dispatch::synchronously: {
                             auto time_reference = std::chrono::system_clock::now();
@@ -1099,7 +1140,12 @@ namespace sepia {
                                 _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                                 if (_event_stream->eof()) {
                                     for (auto byte_iterator = bytes.begin();
-                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         byte_iterator
+                                         != std::next(
+                                                bytes.begin(),
+                                                static_cast<std::iterator_traits<
+                                                    std::vector<uint8_t>::iterator>::difference_type>(
+                                                    _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             if (event.t > previous_t) {
@@ -1132,13 +1178,19 @@ namespace sepia {
                                     }
                                 }
                             }
+                            break;
                         }
                         case dispatch::as_fast_as_possible: {
                             while (_running.load(std::memory_order_relaxed)) {
                                 _event_stream->read(reinterpret_cast<char*>(bytes.data()), bytes.size());
                                 if (_event_stream->eof()) {
                                     for (auto byte_iterator = bytes.begin();
-                                         byte_iterator != std::next(bytes.begin(), _event_stream->gcount());
+                                         byte_iterator
+                                         != std::next(
+                                                bytes.begin(),
+                                                static_cast<std::iterator_traits<
+                                                    std::vector<uint8_t>::iterator>::difference_type>(
+                                                    _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             _handle_event(event);
@@ -1160,6 +1212,7 @@ namespace sepia {
                                     }
                                 }
                             }
+                            break;
                         }
                     }
                 } catch (...) {
@@ -1312,7 +1365,7 @@ namespace sepia {
         /// An error is thrown if the object was constructed with a parameter.
         virtual std::istream& to_json_stream() {
             if (!_is_json_stream) {
-                throw parameter_error("The unvalidated parameter is not a string");
+                throw parameter_error("the unvalidated parameter is not a string");
             }
             return *_json_stream;
         }
@@ -1321,7 +1374,7 @@ namespace sepia {
         /// An error is thrown if the object was constructed with a stream.
         virtual const parameter& to_parameter() const {
             if (_is_json_stream) {
-                throw parameter_error("The unvalidated parameter is not a parameter");
+                throw parameter_error("the unvalidated parameter is not a parameter");
             }
             return *_parameter;
         }
@@ -1412,28 +1465,28 @@ namespace sepia {
         virtual const array_parameter& get_array_parameter(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a list");
+            throw parameter_error("the parameter is not a list");
         }
 
         /// get_boolean is called by a parent parameter when accessing a boolean value.
         virtual bool get_boolean(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a boolean");
+            throw parameter_error("the parameter is not a boolean");
         }
 
         /// get_number is called by a parent parameter when accessing a numeric value.
         virtual double get_number(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a number");
+            throw parameter_error("the parameter is not a number");
         }
 
         /// get_string is called by a parent parameter when accessing a string value.
         virtual std::string get_string(
             const std::vector<std::string>::const_iterator,
             const std::vector<std::string>::const_iterator) const {
-            throw parameter_error("The parameter is not a string");
+            throw parameter_error("the parameter is not a string");
         }
 
         /// clone generates a copy of the parameter.
@@ -1752,12 +1805,12 @@ namespace sepia {
                 const auto& casted_object_parameter = dynamic_cast<const object_parameter&>(parameter);
                 for (const auto& key_and_parameter : casted_object_parameter) {
                     if (_parameter_by_key.find(key_and_parameter.first) == _parameter_by_key.end()) {
-                        throw std::runtime_error("Unexpected key " + key_and_parameter.first);
+                        throw std::runtime_error("unexpected key " + key_and_parameter.first);
                     }
                     _parameter_by_key[key_and_parameter.first]->load(*key_and_parameter.second);
                 }
-            } catch (const std::bad_cast& exception) {
-                throw std::logic_error("Expected an object_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const std::bad_cast&) {
+                throw std::logic_error("expected an object_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -1880,8 +1933,8 @@ namespace sepia {
                     new_parameter->load(*stored_parameter);
                     _parameters.push_back(std::move(new_parameter));
                 }
-            } catch (const std::bad_cast& exception) {
-                throw std::logic_error("Expected an array_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const std::bad_cast&) {
+                throw std::logic_error("expected an array_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -1948,8 +2001,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_boolean({});
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected a boolean_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected a boolean_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -1997,8 +2050,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_number();
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected a number_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected a number_parameter, got a " + std::string(typeid(parameter).name()));
             }
             validate();
         }
@@ -2069,8 +2122,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_string({});
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected a string_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected a string_parameter, got a " + std::string(typeid(parameter).name()));
             }
         }
 
@@ -2110,8 +2163,8 @@ namespace sepia {
         virtual void load(const parameter& parameter) override {
             try {
                 _value = parameter.get_string({});
-            } catch (const parameter_error& exception) {
-                throw std::logic_error("Expected an enum_parameter, got a " + std::string(typeid(parameter).name()));
+            } catch (const parameter_error&) {
+                throw std::logic_error("expected an enum_parameter, got a " + std::string(typeid(parameter).name()));
             }
             validate();
         }
@@ -2128,7 +2181,7 @@ namespace sepia {
                     available_values_string += available_value;
                 }
                 available_values_string += "}";
-                throw parameter_error("The value " + _value + " should be one of " + available_values_string);
+                throw parameter_error("the value " + _value + " should be one of " + available_values_string);
             }
         }
 

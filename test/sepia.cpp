@@ -79,7 +79,7 @@ TEST_CASE("write generic events", "[sepia::write<sepia::type::generic>]") {
     {
         auto input = sepia::filename_to_ifstream(filename);
         input->seekg(0, std::ifstream::end);
-        bytes.resize(input->tellg());
+        bytes.resize(static_cast<std::size_t>(input->tellg()));
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
@@ -100,7 +100,7 @@ TEST_CASE("write DVS events", "[sepia::write<sepia::type::dvs>]") {
     {
         auto input = sepia::filename_to_ifstream(filename);
         input->seekg(0, std::ifstream::end);
-        bytes.resize(input->tellg());
+        bytes.resize(static_cast<std::size_t>(input->tellg()));
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
@@ -123,7 +123,7 @@ TEST_CASE("write ATIS events", "[sepia::write<sepia::type::atis>]") {
     {
         auto input = sepia::filename_to_ifstream(filename);
         input->seekg(0, std::ifstream::end);
-        bytes.resize(input->tellg());
+        bytes.resize(static_cast<std::size_t>(input->tellg()));
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
@@ -146,7 +146,7 @@ TEST_CASE("write color events", "[sepia::write<sepia::type::color>]") {
     {
         auto input = sepia::filename_to_ifstream(filename);
         input->seekg(0, std::ifstream::end);
-        bytes.resize(input->tellg());
+        bytes.resize(static_cast<std::size_t>(input->tellg()));
         input->seekg(0, std::ifstream::beg);
         input->read(&bytes[0], bytes.size());
     }
