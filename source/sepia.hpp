@@ -304,7 +304,7 @@ namespace sepia {
 
     /// filename_to_ifstream creates a readable stream from a file.
     inline std::unique_ptr<std::ifstream> filename_to_ifstream(const std::string& filename) {
-        auto stream = sepia::make_unique<std::ifstream>(filename);
+        auto stream = sepia::make_unique<std::ifstream>(filename, std::ifstream::in | std::ifstream::binary);
         if (!stream->good()) {
             throw unreadable_file(filename);
         }
@@ -313,7 +313,7 @@ namespace sepia {
 
     /// filename_to_ofstream creates a writable stream from a file.
     inline std::unique_ptr<std::ofstream> filename_to_ofstream(const std::string& filename) {
-        auto stream = sepia::make_unique<std::ofstream>(filename);
+        auto stream = sepia::make_unique<std::ofstream>(filename, std::ofstream::out | std::ofstream::binary);
         if (!stream->good()) {
             throw unwritable_file(filename);
         }
