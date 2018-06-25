@@ -22,3 +22,5 @@ solution 'sepia'
         configuration 'macosx'
             buildoptions {'-std=c++11'}
             linkoptions {'-std=c++11'}
+        configuration 'windows'
+            files {'.clang-format'}
