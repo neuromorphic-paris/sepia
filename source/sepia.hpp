@@ -1212,8 +1212,8 @@ namespace sepia {
                                     }
                                 }
                             }
+                            break;
                         }
-                        break;
                     }
                 } catch (...) {
                     _handle_exception(std::current_exception());
