@@ -1,25 +1,5 @@
 #pragma once
 
-#ifdef SEPIA_COMPILER_WORKING_DIRECTORY
-#define SEPIA_STRINGIFY(characters) #characters
-#define SEPIA_TOSTRING(characters) SEPIA_STRINGIFY(characters)
-#ifdef _WIN32
-#define SEPIA_DIRNAME                                                                                                  \
-    sepia::dirname(                                                                                                    \
-        std::string(__FILE__).size() > 1 && __FILE__[1] == ':' ?                                                       \
-            __FILE__ :                                                                                                 \
-            SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "\\" __FILE__)
-#else
-#define SEPIA_DIRNAME                                                                                                  \
-    sepia::dirname(__FILE__[0] == '/' ? __FILE__ : SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
-#endif
-#endif
-#ifdef _WIN32
-#define SEPIA_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
-#else
-#define SEPIA_PACK(declaration) declaration __attribute__((__packed__))
-#endif
-
 #include <array>
 #include <atomic>
 #include <cctype>
@@ -37,6 +17,34 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#ifdef SEPIA_COMPILER_WORKING_DIRECTORY
+#ifdef _WIN32
+std::string SEPIA_TRANSLATE(std::string filename) {
+    for (auto& character : filename) {
+        if (character == '/') {
+            character = '\\';
+        }
+    }
+    return filename;
+}
+#define SEPIA_DIRNAME                                                                                                  \
+    sepia::dirname(                                                                                                    \
+        std::string(__FILE__).size() > 1 && __FILE__[1] == ':' ?                                                       \
+            __FILE__ :                                                                                                 \
+            SEPIA_TRANSLATE(SEPIA_COMPILER_WORKING_DIRECTORY) + ("\\" __FILE__))
+#else
+#define SEPIA_STRINGIFY(characters) #characters
+#define SEPIA_TOSTRING(characters) SEPIA_STRINGIFY(characters)
+#define SEPIA_DIRNAME                                                                                                  \
+    sepia::dirname(__FILE__[0] == '/' ? __FILE__ : SEPIA_TOSTRING(SEPIA_COMPILER_WORKING_DIRECTORY) "/" __FILE__)
+#endif
+#endif
+#ifdef _WIN32
+#define SEPIA_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
+#else
+#define SEPIA_PACK(declaration) declaration __attribute__((__packed__))
+#endif
 
 /// sepia bundles functions and classes to represent a camera and handle its raw stream of events.
 namespace sepia {
