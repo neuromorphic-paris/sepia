@@ -1027,7 +1027,8 @@ namespace sepia {
         write(std::unique_ptr<std::ostream> event_stream, uint16_t width, uint16_t height) :
             _event_stream(std::move(event_stream)),
             _write_to_reference(*_event_stream, width, height) {}
-        write(typename std::enable_if<event_stream_type == type::generic, std::unique_ptr<std::ostream>>::type event_stream) :
+        write(typename std::enable_if<event_stream_type == type::generic, std::unique_ptr<std::ostream>>::type
+                  event_stream) :
             write(std::move(event_stream), 0, 0) {}
         write(const write&) = delete;
         write(write&&) = default;
