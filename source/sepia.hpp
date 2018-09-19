@@ -1043,6 +1043,28 @@ namespace sepia {
         write_to_reference<event_stream_type> _write_to_reference;
     };
 
+    /// write<type::generic> converts and writes generic events to a byte stream.
+    template <>
+    class write<type::generic> {
+        public:
+        write(std::unique_ptr<std::ostream> event_stream) : _write_to_reference(*_event_stream) {}
+        write(std::unique_ptr<std::ostream> event_stream, uint16_t, uint16_t) : write(std::move(event_stream)) {}
+        write(const write&) = delete;
+        write(write&&) = default;
+        write& operator=(const write&) = delete;
+        write& operator=(write&&) = default;
+        virtual ~write() {}
+
+        /// operator() handles an event.
+        virtual void operator()(event<event_stream_type> event) {
+            _write_to_reference(event);
+        }
+
+        protected:
+        std::unique_ptr<std::ostream> _event_stream;
+        write_to_reference<event_stream_type> _write_to_reference;
+    };
+
     /// dispatch specifies when the events are dispatched by an observable.
     enum class dispatch {
         synchronously_but_skip_offset,
