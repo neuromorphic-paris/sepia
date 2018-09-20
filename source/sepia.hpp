@@ -1024,12 +1024,12 @@ namespace sepia {
     template <type event_stream_type>
     class write {
         public:
+        template<type generic_type = type::generic>
+        write(std::unique_ptr<std::ostream> event_stream, typename std::enable_if<event_stream_type == generic_type>::type* = nullptr) :
+            write(std::move(event_stream), 0, 0) {}
         write(std::unique_ptr<std::ostream> event_stream, uint16_t width, uint16_t height) :
             _event_stream(std::move(event_stream)),
             _write_to_reference(*_event_stream, width, height) {}
-        write(typename std::enable_if<event_stream_type == type::generic, std::unique_ptr<std::ostream>>::type
-                  event_stream) :
-            write(std::move(event_stream), 0, 0) {}
         write(const write&) = delete;
         write(write&&) = default;
         write& operator=(const write&) = delete;
