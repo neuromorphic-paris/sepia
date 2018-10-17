@@ -1024,8 +1024,10 @@ namespace sepia {
     template <type event_stream_type>
     class write {
         public:
-        template<type generic_type = type::generic>
-        write(std::unique_ptr<std::ostream> event_stream, typename std::enable_if<event_stream_type == generic_type>::type* = nullptr) :
+        template <type generic_type = type::generic>
+        write(
+            std::unique_ptr<std::ostream> event_stream,
+            typename std::enable_if<event_stream_type == generic_type>::type* = nullptr) :
             write(std::move(event_stream), 0, 0) {}
         write(std::unique_ptr<std::ostream> event_stream, uint16_t width, uint16_t height) :
             _event_stream(std::move(event_stream)),
@@ -2199,6 +2201,43 @@ namespace sepia {
         std::unordered_set<std::string> _available_values;
     };
 
+    /// fifo implemets a thread-safe circular fifo.
+    template <typename Event>
+    class fifo {
+        public:
+        fifo(std::size_t size) : _head(0), _tail(0), _events(size) {}
+
+        /// push adds an event to the circular FIFO in a thread-safe manner, as long as a single thread is writting.
+        /// If the event could not be inserted (FIFO full), false is returned.
+        virtual bool push(Event event) {
+            const auto current_tail = _tail.load(std::memory_order_relaxed);
+            const auto next_tail = (current_tail + 1) % _events.size();
+            if (next_tail != _head.load(std::memory_order_acquire)) {
+                _events[current_tail] = event;
+                _tail.store(next_tail, std::memory_order_release);
+                return true;
+            }
+            return false;
+        }
+
+        /// pull reads an event from the FIFO in a thread-safe manner, as long as a single thread is reading.
+        /// If no event could be read (FIFO empty), false is returned.
+        virtual bool pull(Event& event) {
+            const auto current_head = _head.load(std::memory_order_relaxed);
+            if (current_head != _tail.load(std::memory_order_acquire)) {
+                event = _events[current_head];
+                _head.store((current_head + 1) % _events.size(), std::memory_order_release);
+                return true;
+            }
+            return false;
+        }
+
+        protected:
+        std::atomic<std::size_t> _head;
+        std::atomic<std::size_t> _tail;
+        std::vector<Event> _events;
+    };
+
     /// specialized_camera represents a template-specialized generic event-based camera.
     template <typename Event, typename HandleEvent, typename HandleException>
     class specialized_camera {
@@ -2212,20 +2251,15 @@ namespace sepia {
             _handle_exception(std::forward<HandleException>(handle_exception)),
             _buffer_running(true),
             _sleep_duration(sleep_duration),
-            _head(0),
-            _tail(0),
-            _events(fifo_size) {
+            _fifo(fifo_size) {
             _buffer_loop = std::thread([this]() -> void {
                 try {
                     Event event = {};
                     while (_buffer_running.load(std::memory_order_relaxed)) {
-                        const auto current_head = _head.load(std::memory_order_relaxed);
-                        if (current_head == _tail.load(std::memory_order_acquire)) {
-                            std::this_thread::sleep_for(_sleep_duration);
-                        } else {
-                            event = _events[current_head];
-                            _head.store((current_head + 1) % _events.size(), std::memory_order_release);
+                        if (_fifo->pull(event)) {
                             this->_handle_event(event);
+                        } else {
+                            std::this_thread::sleep_for(_sleep_duration);
                         }
                     }
                 } catch (...) {
@@ -2242,17 +2276,9 @@ namespace sepia {
             _buffer_loop.join();
         }
 
-        /// push adds an event to the circular FIFO in a thread-safe manner, as long as one thread only is writting.
-        /// If the event could not be inserted (FIFO full), false is returned.
+        /// push adds an event to the managed circular FIFO.
         virtual bool push(Event event) {
-            const auto current_tail = _tail.load(std::memory_order_relaxed);
-            const auto next_tail = (current_tail + 1) % _events.size();
-            if (next_tail != _head.load(std::memory_order_acquire)) {
-                _events[current_tail] = event;
-                _tail.store(next_tail, std::memory_order_release);
-                return true;
-            }
-            return false;
+            _fifo.push(event);
         }
 
         protected:
@@ -2261,8 +2287,6 @@ namespace sepia {
         std::thread _buffer_loop;
         std::atomic_bool _buffer_running;
         const std::chrono::milliseconds _sleep_duration;
-        std::atomic<std::size_t> _head;
-        std::atomic<std::size_t> _tail;
-        std::vector<Event> _events;
+        fifo<Event> _fifo;
     };
 }
