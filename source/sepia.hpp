@@ -1024,8 +1024,10 @@ namespace sepia {
     template <type event_stream_type>
     class write {
         public:
-        template<type generic_type = type::generic>
-        write(std::unique_ptr<std::ostream> event_stream, typename std::enable_if<event_stream_type == generic_type>::type* = nullptr) :
+        template <type generic_type = type::generic>
+        write(
+            std::unique_ptr<std::ostream> event_stream,
+            typename std::enable_if<event_stream_type == generic_type>::type* = nullptr) :
             write(std::move(event_stream), 0, 0) {}
         write(std::unique_ptr<std::ostream> event_stream, uint16_t width, uint16_t height) :
             _event_stream(std::move(event_stream)),
@@ -2203,12 +2205,8 @@ namespace sepia {
     template <typename Event>
     class fifo {
         public:
-        fifo(std::size_t size) :
-            _head(0),
-            _tail(0),
-            _events(size)
-        {}
-        
+        fifo(std::size_t size) : _head(0), _tail(0), _events(size) {}
+
         /// push adds an event to the circular FIFO in a thread-safe manner, as long as a single thread is writting.
         /// If the event could not be inserted (FIFO full), false is returned.
         virtual bool push(Event event) {
@@ -2221,7 +2219,7 @@ namespace sepia {
             }
             return false;
         }
-        
+
         /// pull reads an event from the FIFO in a thread-safe manner, as long as a single thread is reading.
         /// If no event could be read (FIFO empty), false is returned.
         virtual bool pull(Event& event) {
@@ -2233,13 +2231,13 @@ namespace sepia {
             }
             return false;
         }
-        
+
         protected:
         std::atomic<std::size_t> _head;
         std::atomic<std::size_t> _tail;
         std::vector<Event> _events;
     };
-        
+
     /// specialized_camera represents a template-specialized generic event-based camera.
     template <typename Event, typename HandleEvent, typename HandleException>
     class specialized_camera {
