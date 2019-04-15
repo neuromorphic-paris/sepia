@@ -306,7 +306,7 @@ namespace sepia {
         }
         return path;
     }
-    std::string join(std::initializer_list<std::string> components) {
+    inline std::string join(std::initializer_list<std::string> components) {
         return join(components.begin(), components.end());
     }
 
@@ -404,7 +404,7 @@ namespace sepia {
 
     /// write_header writes the header bytes to a byte stream.
     template <type event_stream_type>
-    void write_header(std::ostream& event_stream, uint16_t width, uint16_t height) {
+    inline void write_header(std::ostream& event_stream, uint16_t width, uint16_t height) {
         event_stream.write(event_stream_signature().data(), event_stream_signature().size());
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
         std::array<uint8_t, 5> bytes{
@@ -417,14 +417,14 @@ namespace sepia {
         event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
     }
     template <type event_stream_type, typename = typename std::enable_if<event_stream_type == type::generic>>
-    void write_header(std::ostream& event_stream) {
+    inline void write_header(std::ostream& event_stream) {
         event_stream.write(event_stream_signature().data(), event_stream_signature().size());
         event_stream.write(reinterpret_cast<char*>(event_stream_version().data()), event_stream_version().size());
         auto type_byte = static_cast<uint8_t>(event_stream_type);
         event_stream.put(*reinterpret_cast<char*>(&type_byte));
     }
     template <>
-    void write_header<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) {
+    inline void write_header<type::generic>(std::ostream& event_stream, uint16_t, uint16_t) {
         write_header<type::generic>(event_stream);
     }
 
