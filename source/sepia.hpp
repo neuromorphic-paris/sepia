@@ -69,7 +69,7 @@ namespace sepia {
 
     /// make_unique creates a unique_ptr.
     template <typename T, typename... Args>
-    std::unique_ptr<T> make_unique(Args&&... args) {
+    inline std::unique_ptr<T> make_unique(Args&&... args) {
         return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
     }
 
@@ -291,7 +291,7 @@ namespace sepia {
 
     /// join concatenates several path components.
     template <typename Iterator>
-    std::string join(Iterator begin, Iterator end) {
+    inline std::string join(Iterator begin, Iterator end) {
 #ifdef _WIN32
         const auto separator = '\\';
 #else
@@ -501,7 +501,7 @@ namespace sepia {
 
     /// make_split creates a split from functors.
     template <type event_stream_type, typename HandleFirstSpecializedEvent, typename HandleSecondSpecializedEvent>
-    split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent> make_split(
+    inline split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent> make_split(
         HandleFirstSpecializedEvent handle_first_specialized_event,
         HandleSecondSpecializedEvent handle_second_specialized_event) {
         return split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent>(
@@ -1094,10 +1094,10 @@ namespace sepia {
                                     for (auto byte_iterator = bytes.begin();
                                          byte_iterator
                                          != std::next(
-                                                bytes.begin(),
-                                                static_cast<std::iterator_traits<
-                                                    std::vector<uint8_t>::iterator>::difference_type>(
-                                                    _event_stream->gcount()));
+                                             bytes.begin(),
+                                             static_cast<
+                                                 std::iterator_traits<std::vector<uint8_t>::iterator>::difference_type>(
+                                                 _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             if (offset_skipped) {
@@ -1155,10 +1155,10 @@ namespace sepia {
                                     for (auto byte_iterator = bytes.begin();
                                          byte_iterator
                                          != std::next(
-                                                bytes.begin(),
-                                                static_cast<std::iterator_traits<
-                                                    std::vector<uint8_t>::iterator>::difference_type>(
-                                                    _event_stream->gcount()));
+                                             bytes.begin(),
+                                             static_cast<
+                                                 std::iterator_traits<std::vector<uint8_t>::iterator>::difference_type>(
+                                                 _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             if (event.t > previous_t) {
@@ -1200,10 +1200,10 @@ namespace sepia {
                                     for (auto byte_iterator = bytes.begin();
                                          byte_iterator
                                          != std::next(
-                                                bytes.begin(),
-                                                static_cast<std::iterator_traits<
-                                                    std::vector<uint8_t>::iterator>::difference_type>(
-                                                    _event_stream->gcount()));
+                                             bytes.begin(),
+                                             static_cast<
+                                                 std::iterator_traits<std::vector<uint8_t>::iterator>::difference_type>(
+                                                 _event_stream->gcount()));
                                          ++byte_iterator) {
                                         if (handle_byte(*byte_iterator, event)) {
                                             _handle_event(event);
@@ -1259,7 +1259,7 @@ namespace sepia {
         typename HandleEvent,
         typename HandleException,
         typename MustRestart = decltype(&false_function)>
-    std::unique_ptr<observable<event_stream_type, HandleEvent, HandleException, MustRestart>> make_observable(
+    inline std::unique_ptr<observable<event_stream_type, HandleEvent, HandleException, MustRestart>> make_observable(
         std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         HandleException handle_exception,
@@ -1334,7 +1334,7 @@ namespace sepia {
     /// join_observable creates an event stream observable from functors and blocks until the end
     /// of the input stream is reached.
     template <type event_stream_type, typename HandleEvent>
-    void join_observable(
+    inline void join_observable(
         std::unique_ptr<std::istream> event_stream,
         HandleEvent handle_event,
         std::size_t chunk_size = 1 << 10) {
