@@ -1,4 +1,4 @@
-![sepia](banner.png "The Sepia banner")
+![banner](banner.png)
 
 Sepia implements the [Event Stream](https://github.com/neuromorphic-paris/event_stream) specification, and provides components on top of which a communication library with actual event-based cameras can be built.
 
