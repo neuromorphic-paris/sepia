@@ -2278,7 +2278,7 @@ namespace sepia {
 
         /// push adds an event to the managed circular FIFO.
         virtual bool push(Event event) {
-            _fifo.push(event);
+            return _fifo.push(event);
         }
 
         protected:
