@@ -2256,7 +2256,7 @@ namespace sepia {
                 try {
                     Event event = {};
                     while (_buffer_running.load(std::memory_order_relaxed)) {
-                        if (_fifo->pull(event)) {
+                        if (_fifo.pull(event)) {
                             this->_handle_event(event);
                         } else {
                             std::this_thread::sleep_for(_sleep_duration);
