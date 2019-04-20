@@ -669,7 +669,7 @@ namespace sepia {
             switch (_state) {
                 case state::idle:
                     if ((byte & 0b11111100) == 0b11111100) {
-                        atis_event.t += 0b111111 * (byte & 0b11);
+                        atis_event.t += static_cast<uint64_t>(0b111111) * (byte & 0b11);
                     } else {
                         atis_event.t += (byte >> 2);
                         atis_event.is_threshold_crossing = ((byte & 1) == 1);
