@@ -1414,7 +1414,7 @@ namespace sepia {
         parameter(parameter&&) = default;
         parameter& operator=(const parameter&) = delete;
         parameter& operator=(parameter&&) = default;
-        virtual ~parameter(){};
+        virtual ~parameter() {};
 
         /// get_array_parameter is used to retrieve a list parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
