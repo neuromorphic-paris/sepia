@@ -364,7 +364,7 @@ namespace sepia {
             }
         }
         {
-            const char type_char = event_stream.get();
+            const auto type_char = static_cast<char>(event_stream.get());
             if (event_stream.eof()) {
                 throw incomplete_header();
             }
@@ -387,12 +387,12 @@ namespace sepia {
             if (event_stream.eof()) {
                 throw incomplete_header();
             }
-            header.width =
+            header.width = static_cast<uint16_t>(
                 (static_cast<uint16_t>(std::get<0>(size_bytes))
-                 | (static_cast<uint16_t>(std::get<1>(size_bytes)) << 8));
-            header.height =
+                 | (static_cast<uint16_t>(std::get<1>(size_bytes)) << 8)));
+            header.height = static_cast<uint16_t>(
                 (static_cast<uint16_t>(std::get<2>(size_bytes))
-                 | (static_cast<uint16_t>(std::get<3>(size_bytes)) << 8));
+                 | (static_cast<uint16_t>(std::get<3>(size_bytes)) << 8)));
         }
         return header;
     }
@@ -485,12 +485,13 @@ namespace sepia {
         virtual ~split<type::atis, HandleDvsEvent, HandleThresholdCrossing>() {}
 
         /// operator() handles an event.
-        virtual void operator()(atis_event atis_event) {
-            if (atis_event.is_threshold_crossing) {
-                _handle_threshold_crossing(
-                    threshold_crossing{atis_event.t, atis_event.x, atis_event.y, atis_event.polarity});
+        virtual void operator()(atis_event current_atis_event) {
+            if (current_atis_event.is_threshold_crossing) {
+                _handle_threshold_crossing(threshold_crossing{
+                    current_atis_event.t, current_atis_event.x, current_atis_event.y, current_atis_event.polarity});
             } else {
-                _handle_dvs_event(dvs_event{atis_event.t, atis_event.x, atis_event.y, atis_event.polarity});
+                _handle_dvs_event(dvs_event{
+                    current_atis_event.t, current_atis_event.x, current_atis_event.y, current_atis_event.polarity});
             }
         }
 
@@ -833,11 +834,11 @@ namespace sepia {
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
-        virtual void operator()(generic_event generic_event) {
-            if (generic_event.t < _previous_t) {
+        virtual void operator()(generic_event current_generic_event) {
+            if (current_generic_event.t < _previous_t) {
                 throw std::logic_error("the event's timestamp is smaller than the previous one's");
             }
-            auto relative_t = generic_event.t - _previous_t;
+            auto relative_t = current_generic_event.t - _previous_t;
             if (relative_t >= 0b11111110) {
                 const auto number_of_overflows = relative_t / 0b11111110;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
@@ -846,11 +847,12 @@ namespace sepia {
                 relative_t -= number_of_overflows * 0b11111110;
             }
             _event_stream.put(static_cast<uint8_t>(relative_t));
-            for (std::size_t size = generic_event.bytes.size(); size > 0; size >>= 7) {
+            for (std::size_t size = current_generic_event.bytes.size(); size > 0; size >>= 7) {
                 _event_stream.put(static_cast<uint8_t>((size & 0b1111111) << 1) | ((size >> 7) > 0 ? 1 : 0));
             }
-            _event_stream.write(reinterpret_cast<const char*>(generic_event.bytes.data()), generic_event.bytes.size());
-            _previous_t = generic_event.t;
+            _event_stream.write(
+                reinterpret_cast<const char*>(current_generic_event.bytes.data()), current_generic_event.bytes.size());
+            _previous_t = current_generic_event.t;
         }
 
         protected:
@@ -876,14 +878,14 @@ namespace sepia {
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
-        virtual void operator()(dvs_event dvs_event) {
-            if (dvs_event.x >= _width || dvs_event.y >= _height) {
+        virtual void operator()(dvs_event current_dvs_event) {
+            if (current_dvs_event.x >= _width || current_dvs_event.y >= _height) {
                 throw coordinates_overflow();
             }
-            if (dvs_event.t < _previous_t) {
+            if (current_dvs_event.t < _previous_t) {
                 throw std::logic_error("the event's timestamp is smaller than the previous one's");
             }
-            auto relative_t = dvs_event.t - _previous_t;
+            auto relative_t = current_dvs_event.t - _previous_t;
             if (relative_t >= 0b1111111) {
                 const auto number_of_overflows = relative_t / 0b1111111;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
@@ -892,14 +894,14 @@ namespace sepia {
                 relative_t -= number_of_overflows * 0b1111111;
             }
             std::array<uint8_t, 5> bytes{
-                static_cast<uint8_t>((relative_t << 1) | (dvs_event.is_increase ? 1 : 0)),
-                static_cast<uint8_t>(dvs_event.x & 0b11111111),
-                static_cast<uint8_t>((dvs_event.x & 0b1111111100000000) >> 8),
-                static_cast<uint8_t>(dvs_event.y & 0b11111111),
-                static_cast<uint8_t>((dvs_event.y & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>((relative_t << 1) | (current_dvs_event.is_increase ? 1 : 0)),
+                static_cast<uint8_t>(current_dvs_event.x & 0b11111111),
+                static_cast<uint8_t>((current_dvs_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(current_dvs_event.y & 0b11111111),
+                static_cast<uint8_t>((current_dvs_event.y & 0b1111111100000000) >> 8),
             };
             _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
-            _previous_t = dvs_event.t;
+            _previous_t = current_dvs_event.t;
         }
 
         protected:
@@ -927,14 +929,14 @@ namespace sepia {
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
-        virtual void operator()(atis_event atis_event) {
-            if (atis_event.x >= _width || atis_event.y >= _height) {
+        virtual void operator()(atis_event current_atis_event) {
+            if (current_atis_event.x >= _width || current_atis_event.y >= _height) {
                 throw coordinates_overflow();
             }
-            if (atis_event.t < _previous_t) {
+            if (current_atis_event.t < _previous_t) {
                 throw std::logic_error("the event's timestamp is smaller than the previous one's");
             }
-            auto relative_t = atis_event.t - _previous_t;
+            auto relative_t = current_atis_event.t - _previous_t;
             if (relative_t >= 0b111111) {
                 const auto number_of_overflows = relative_t / 0b111111;
                 for (std::size_t index = 0; index < number_of_overflows / 0b11; ++index) {
@@ -948,15 +950,15 @@ namespace sepia {
             }
             std::array<uint8_t, 5> bytes{
                 static_cast<uint8_t>(
-                    (relative_t << 2) | (atis_event.polarity ? 0b10 : 0b00)
-                    | (atis_event.is_threshold_crossing ? 1 : 0)),
-                static_cast<uint8_t>(atis_event.x & 0b11111111),
-                static_cast<uint8_t>((atis_event.x & 0b1111111100000000) >> 8),
-                static_cast<uint8_t>(atis_event.y & 0b11111111),
-                static_cast<uint8_t>((atis_event.y & 0b1111111100000000) >> 8),
+                    (relative_t << 2) | (current_atis_event.polarity ? 0b10 : 0b00)
+                    | (current_atis_event.is_threshold_crossing ? 1 : 0)),
+                static_cast<uint8_t>(current_atis_event.x & 0b11111111),
+                static_cast<uint8_t>((current_atis_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(current_atis_event.y & 0b11111111),
+                static_cast<uint8_t>((current_atis_event.y & 0b1111111100000000) >> 8),
             };
             _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
-            _previous_t = atis_event.t;
+            _previous_t = current_atis_event.t;
         }
 
         protected:
@@ -984,14 +986,14 @@ namespace sepia {
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
-        virtual void operator()(color_event color_event) {
-            if (color_event.x >= _width || color_event.y >= _height) {
+        virtual void operator()(color_event current_color_event) {
+            if (current_color_event.x >= _width || current_color_event.y >= _height) {
                 throw coordinates_overflow();
             }
-            if (color_event.t < _previous_t) {
+            if (current_color_event.t < _previous_t) {
                 throw std::logic_error("the event's timestamp is smaller than the previous one's");
             }
-            auto relative_t = color_event.t - _previous_t;
+            auto relative_t = current_color_event.t - _previous_t;
             if (relative_t >= 0b11111110) {
                 const auto number_of_overflows = relative_t / 0b11111110;
                 for (std::size_t index = 0; index < number_of_overflows; ++index) {
@@ -1001,16 +1003,16 @@ namespace sepia {
             }
             std::array<uint8_t, 8> bytes{
                 static_cast<uint8_t>(relative_t),
-                static_cast<uint8_t>(color_event.x & 0b11111111),
-                static_cast<uint8_t>((color_event.x & 0b1111111100000000) >> 8),
-                static_cast<uint8_t>(color_event.y & 0b11111111),
-                static_cast<uint8_t>((color_event.y & 0b1111111100000000) >> 8),
-                static_cast<uint8_t>(color_event.r),
-                static_cast<uint8_t>(color_event.g),
-                static_cast<uint8_t>(color_event.b),
+                static_cast<uint8_t>(current_color_event.x & 0b11111111),
+                static_cast<uint8_t>((current_color_event.x & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(current_color_event.y & 0b11111111),
+                static_cast<uint8_t>((current_color_event.y & 0b1111111100000000) >> 8),
+                static_cast<uint8_t>(current_color_event.r),
+                static_cast<uint8_t>(current_color_event.g),
+                static_cast<uint8_t>(current_color_event.b),
             };
             _event_stream.write(reinterpret_cast<char*>(bytes.data()), bytes.size());
-            _previous_t = color_event.t;
+            _previous_t = current_color_event.t;
         }
 
         protected:
