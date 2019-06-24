@@ -437,8 +437,8 @@ namespace sepia {
     class split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent> {
         public:
         split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(
-            HandleIncreaseEvent handle_increase_event,
-            HandleDecreaseEvent handle_decrease_event) :
+            HandleIncreaseEvent&& handle_increase_event,
+            HandleDecreaseEvent&& handle_decrease_event) :
             _handle_increase_event(std::forward<HandleIncreaseEvent>(handle_increase_event)),
             _handle_decrease_event(std::forward<HandleDecreaseEvent>(handle_decrease_event)) {}
         split<type::dvs, HandleIncreaseEvent, HandleDecreaseEvent>(
@@ -470,8 +470,8 @@ namespace sepia {
     class split<type::atis, HandleDvsEvent, HandleThresholdCrossing> {
         public:
         split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(
-            HandleDvsEvent handle_dvs_event,
-            HandleThresholdCrossing handle_threshold_crossing) :
+            HandleDvsEvent&& handle_dvs_event,
+            HandleThresholdCrossing&& handle_threshold_crossing) :
             _handle_dvs_event(std::forward<HandleDvsEvent>(handle_dvs_event)),
             _handle_threshold_crossing(std::forward<HandleThresholdCrossing>(handle_threshold_crossing)) {}
         split<type::atis, HandleDvsEvent, HandleThresholdCrossing>(
@@ -503,8 +503,8 @@ namespace sepia {
     /// make_split creates a split from functors.
     template <type event_stream_type, typename HandleFirstSpecializedEvent, typename HandleSecondSpecializedEvent>
     inline split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent> make_split(
-        HandleFirstSpecializedEvent handle_first_specialized_event,
-        HandleSecondSpecializedEvent handle_second_specialized_event) {
+        HandleFirstSpecializedEvent&& handle_first_specialized_event,
+        HandleSecondSpecializedEvent&& handle_second_specialized_event) {
         return split<event_stream_type, HandleFirstSpecializedEvent, HandleSecondSpecializedEvent>(
             std::forward<HandleFirstSpecializedEvent>(handle_first_specialized_event),
             std::forward<HandleSecondSpecializedEvent>(handle_second_specialized_event));
@@ -1063,9 +1063,9 @@ namespace sepia {
         public:
         observable(
             std::unique_ptr<std::istream> event_stream,
-            HandleEvent handle_event,
-            HandleException handle_exception,
-            MustRestart must_restart,
+            HandleEvent&& handle_event,
+            HandleException&& handle_exception,
+            MustRestart&& must_restart,
             dispatch dispatch_events,
             std::size_t chunk_size) :
             _event_stream(std::move(event_stream)),
@@ -1263,9 +1263,9 @@ namespace sepia {
         typename MustRestart = decltype(&false_function)>
     inline std::unique_ptr<observable<event_stream_type, HandleEvent, HandleException, MustRestart>> make_observable(
         std::unique_ptr<std::istream> event_stream,
-        HandleEvent handle_event,
-        HandleException handle_exception,
-        MustRestart must_restart = &false_function,
+        HandleEvent&& handle_event,
+        HandleException&& handle_exception,
+        MustRestart&& must_restart = &false_function,
         dispatch dispatch_events = dispatch::synchronously_but_skip_offset,
         std::size_t chunk_size = 1 << 10) {
         return sepia::make_unique<observable<event_stream_type, HandleEvent, HandleException, MustRestart>>(
@@ -1338,7 +1338,7 @@ namespace sepia {
     template <type event_stream_type, typename HandleEvent>
     inline void join_observable(
         std::unique_ptr<std::istream> event_stream,
-        HandleEvent handle_event,
+        HandleEvent&& handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
         auto observable = make_observable<event_stream_type>(
@@ -1414,7 +1414,7 @@ namespace sepia {
         parameter(parameter&&) = default;
         parameter& operator=(const parameter&) = delete;
         parameter& operator=(parameter&&) = default;
-        virtual ~parameter() {};
+        virtual ~parameter(){};
 
         /// get_array_parameter is used to retrieve a list parameter.
         /// It must be given a vector of strings which contains the parameter key (or keys for nested object
@@ -2245,8 +2245,8 @@ namespace sepia {
     class specialized_camera {
         public:
         specialized_camera(
-            HandleEvent handle_event,
-            HandleException handle_exception,
+            HandleEvent&& handle_event,
+            HandleException&& handle_exception,
             std::size_t fifo_size,
             const std::chrono::milliseconds& sleep_duration) :
             _handle_event(std::forward<HandleEvent>(handle_event)),
