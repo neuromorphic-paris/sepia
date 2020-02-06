@@ -592,8 +592,8 @@ namespace sepia {
         handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
         handle_byte(const handle_byte&) = default;
         handle_byte(handle_byte&&) = default;
-        handle_byte& operator=(const handle_byte&) = default;
-        handle_byte& operator=(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = delete;
+        handle_byte& operator=(handle_byte&&) = delete;
         virtual ~handle_byte() {}
 
         /// operator() handles a byte.
@@ -661,8 +661,8 @@ namespace sepia {
         handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
         handle_byte(const handle_byte&) = default;
         handle_byte(handle_byte&&) = default;
-        handle_byte& operator=(const handle_byte&) = default;
-        handle_byte& operator=(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = delete;
+        handle_byte& operator=(handle_byte&&) = delete;
         virtual ~handle_byte() {}
 
         /// operator() handles a byte.
@@ -731,8 +731,8 @@ namespace sepia {
         handle_byte(uint16_t width, uint16_t height) : _width(width), _height(height), _state(state::idle) {}
         handle_byte(const handle_byte&) = default;
         handle_byte(handle_byte&&) = default;
-        handle_byte& operator=(const handle_byte&) = default;
-        handle_byte& operator=(handle_byte&&) = default;
+        handle_byte& operator=(const handle_byte&) = delete;
+        handle_byte& operator=(handle_byte&&) = delete;
         virtual ~handle_byte() {}
 
         /// operator() handles a byte.
@@ -830,7 +830,7 @@ namespace sepia {
         write_to_reference(const write_to_reference&) = delete;
         write_to_reference(write_to_reference&&) = default;
         write_to_reference& operator=(const write_to_reference&) = delete;
-        write_to_reference& operator=(write_to_reference&&) = default;
+        write_to_reference& operator=(write_to_reference&&) = delete;
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
@@ -874,7 +874,7 @@ namespace sepia {
         write_to_reference(const write_to_reference&) = delete;
         write_to_reference(write_to_reference&&) = default;
         write_to_reference& operator=(const write_to_reference&) = delete;
-        write_to_reference& operator=(write_to_reference&&) = default;
+        write_to_reference& operator=(write_to_reference&&) = delete;
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
@@ -925,7 +925,7 @@ namespace sepia {
         write_to_reference(const write_to_reference&) = delete;
         write_to_reference(write_to_reference&&) = default;
         write_to_reference& operator=(const write_to_reference&) = delete;
-        write_to_reference& operator=(write_to_reference&&) = default;
+        write_to_reference& operator=(write_to_reference&&) = delete;
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
@@ -982,7 +982,7 @@ namespace sepia {
         write_to_reference(const write_to_reference&) = delete;
         write_to_reference(write_to_reference&&) = default;
         write_to_reference& operator=(const write_to_reference&) = delete;
-        write_to_reference& operator=(write_to_reference&&) = default;
+        write_to_reference& operator=(write_to_reference&&) = delete;
         virtual ~write_to_reference() {}
 
         /// operator() handles an event.
@@ -1282,9 +1282,9 @@ namespace sepia {
         public:
         capture_exception() = default;
         capture_exception(const capture_exception&) = delete;
-        capture_exception(capture_exception&&) = default;
+        capture_exception(capture_exception&&) = delete;
         capture_exception& operator=(const capture_exception&) = delete;
-        capture_exception& operator=(capture_exception&&) = default;
+        capture_exception& operator=(capture_exception&&) = delete;
         virtual ~capture_exception() {}
 
         /// operator() handles an exception.
