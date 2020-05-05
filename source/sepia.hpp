@@ -202,7 +202,7 @@ namespace sepia {
     class unwritable_file : public std::runtime_error {
         public:
         unwritable_file(const std::string& filename) :
-            std::runtime_error("the file '" + filename + "'' could not be open for writing") {}
+            std::runtime_error("the file '" + filename + "' could not be open for writing") {}
     };
 
     /// wrong_signature is thrown when an input file does not have the expected signature.
