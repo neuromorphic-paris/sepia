@@ -41,7 +41,7 @@ std::string SEPIA_TRANSLATE(std::string filename) {
 #endif
 #endif
 #ifdef _WIN32
-#define SEPIA_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
+#define SEPIA_PACK(declaration) declaration
 #else
 #define SEPIA_PACK(declaration) declaration __attribute__((__packed__))
 #endif
