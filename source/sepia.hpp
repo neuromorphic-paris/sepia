@@ -865,10 +865,7 @@ namespace sepia {
     class write_to_reference<type::dvs> {
         public:
         write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
-            _event_stream(event_stream),
-            _width(width),
-            _height(height),
-            _previous_t(0) {
+            _event_stream(event_stream), _width(width), _height(height), _previous_t(0) {
             write_header<type::dvs>(_event_stream, width, height);
         }
         write_to_reference(const write_to_reference&) = delete;
@@ -916,10 +913,7 @@ namespace sepia {
     class write_to_reference<type::atis> {
         public:
         write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
-            _event_stream(event_stream),
-            _width(width),
-            _height(height),
-            _previous_t(0) {
+            _event_stream(event_stream), _width(width), _height(height), _previous_t(0) {
             write_header<type::atis>(_event_stream, width, height);
         }
         write_to_reference(const write_to_reference&) = delete;
@@ -973,10 +967,7 @@ namespace sepia {
     class write_to_reference<type::color> {
         public:
         write_to_reference(std::ostream& event_stream, uint16_t width, uint16_t height) :
-            _event_stream(event_stream),
-            _width(width),
-            _height(height),
-            _previous_t(0) {
+            _event_stream(event_stream), _width(width), _height(height), _previous_t(0) {
             write_header<type::color>(_event_stream, width, height);
         }
         write_to_reference(const write_to_reference&) = delete;
@@ -1032,8 +1023,7 @@ namespace sepia {
             typename std::enable_if<event_stream_type == generic_type>::type* = nullptr) :
             write(std::move(event_stream), 0, 0) {}
         write(std::unique_ptr<std::ostream> event_stream, uint16_t width, uint16_t height) :
-            _event_stream(std::move(event_stream)),
-            _write_to_reference(*_event_stream, width, height) {}
+            _event_stream(std::move(event_stream)), _write_to_reference(*_event_stream, width, height) {}
         write(const write&) = delete;
         write(write&&) = default;
         write& operator=(const write&) = delete;
@@ -1063,6 +1053,7 @@ namespace sepia {
         public:
         observable(
             std::unique_ptr<std::istream> event_stream,
+            sepia::header stream_header,
             HandleEvent&& handle_event,
             HandleException&& handle_exception,
             MustRestart&& must_restart,
@@ -1075,14 +1066,47 @@ namespace sepia {
             _dispatch_events(dispatch_events),
             _chunk_size(chunk_size),
             _running(true) {
-            const auto header = read_header(*_event_stream);
-            if (header.event_stream_type != event_stream_type) {
+            if (stream_header.event_stream_type != event_stream_type) {
                 throw unsupported_event_type();
             }
-            _loop = std::thread([this, header]() {
+            _loop = loop(stream_header);
+        }
+        observable(
+            std::unique_ptr<std::istream> event_stream,
+            HandleEvent&& handle_event,
+            HandleException&& handle_exception,
+            MustRestart&& must_restart,
+            dispatch dispatch_events,
+            std::size_t chunk_size) :
+            _event_stream(std::move(event_stream)),
+            _handle_event(std::forward<HandleEvent>(handle_event)),
+            _handle_exception(std::forward<HandleException>(handle_exception)),
+            _must_restart(std::forward<MustRestart>(must_restart)),
+            _dispatch_events(dispatch_events),
+            _chunk_size(chunk_size),
+            _running(true) {
+            const auto stream_header = read_header(*_event_stream);
+            if (stream_header.event_stream_type != event_stream_type) {
+                throw unsupported_event_type();
+            }
+            _loop = loop(stream_header);
+        }
+        observable(const observable&) = delete;
+        observable(observable&&) = default;
+        observable& operator=(const observable&) = delete;
+        observable& operator=(observable&&) = default;
+        virtual ~observable() {
+            _running.store(false, std::memory_order_relaxed);
+            _loop.join();
+        }
+
+        protected:
+        /// loop creates the decoding loop.
+        virtual std::thread loop(header stream_header) {
+            return std::thread([this, stream_header]() {
                 try {
                     event<event_stream_type> event = {};
-                    handle_byte<event_stream_type> handle_byte(header.width, header.height);
+                    handle_byte<event_stream_type> handle_byte(stream_header.width, stream_header.height);
                     std::vector<uint8_t> bytes(_chunk_size);
                     switch (_dispatch_events) {
                         case dispatch::synchronously_but_skip_offset: {
@@ -1235,16 +1259,7 @@ namespace sepia {
                 }
             });
         }
-        observable(const observable&) = delete;
-        observable(observable&&) = default;
-        observable& operator=(const observable&) = delete;
-        observable& operator=(observable&&) = default;
-        virtual ~observable() {
-            _running.store(false, std::memory_order_relaxed);
-            _loop.join();
-        }
 
-        protected:
         std::unique_ptr<std::istream> _event_stream;
         HandleEvent _handle_event;
         HandleException _handle_exception;
@@ -1256,6 +1271,28 @@ namespace sepia {
     };
 
     /// make_observable creates an event stream observable from functors.
+    template <
+        type event_stream_type,
+        typename HandleEvent,
+        typename HandleException,
+        typename MustRestart = decltype(&false_function)>
+    inline std::unique_ptr<observable<event_stream_type, HandleEvent, HandleException, MustRestart>> make_observable(
+        std::unique_ptr<std::istream> event_stream,
+        header stream_header,
+        HandleEvent&& handle_event,
+        HandleException&& handle_exception,
+        MustRestart&& must_restart = &false_function,
+        dispatch dispatch_events = dispatch::synchronously_but_skip_offset,
+        std::size_t chunk_size = 1 << 10) {
+        return sepia::make_unique<observable<event_stream_type, HandleEvent, HandleException, MustRestart>>(
+            std::move(event_stream),
+            stream_header,
+            std::forward<HandleEvent>(handle_event),
+            std::forward<HandleException>(handle_exception),
+            std::forward<MustRestart>(must_restart),
+            dispatch_events,
+            chunk_size);
+    }
     template <
         type event_stream_type,
         typename HandleEvent,
@@ -1338,6 +1375,24 @@ namespace sepia {
     template <type event_stream_type, typename HandleEvent>
     inline void join_observable(
         std::unique_ptr<std::istream> event_stream,
+        header stream_header,
+        HandleEvent&& handle_event,
+        std::size_t chunk_size = 1 << 10) {
+        capture_exception capture_observable_exception;
+        auto observable = make_observable<event_stream_type>(
+            std::move(event_stream),
+            stream_header,
+            std::forward<HandleEvent>(handle_event),
+            std::ref(capture_observable_exception),
+            &false_function,
+            dispatch::as_fast_as_possible,
+            chunk_size);
+        capture_observable_exception.wait();
+        capture_observable_exception.rethrow_unless<end_of_file>();
+    }
+    template <type event_stream_type, typename HandleEvent>
+    inline void join_observable(
+        std::unique_ptr<std::istream> event_stream,
         HandleEvent&& handle_event,
         std::size_t chunk_size = 1 << 10) {
         capture_exception capture_observable_exception;
@@ -1360,11 +1415,9 @@ namespace sepia {
     class unvalidated_parameter {
         public:
         unvalidated_parameter(std::unique_ptr<std::istream> json_stream) :
-            _is_json_stream(true),
-            _json_stream(std::move(json_stream)) {}
+            _is_json_stream(true), _json_stream(std::move(json_stream)) {}
         unvalidated_parameter(std::unique_ptr<parameter> parameter) :
-            _is_json_stream(false),
-            _parameter(std::move(parameter)) {}
+            _is_json_stream(false), _parameter(std::move(parameter)) {}
         unvalidated_parameter(const unvalidated_parameter&) = delete;
         unvalidated_parameter(unvalidated_parameter&&) = default;
         unvalidated_parameter& operator=(const unvalidated_parameter&) = delete;
@@ -1854,8 +1907,7 @@ namespace sepia {
 
         template <typename Parameter>
         array_parameter(Parameter&& template_parameter) :
-            parameter(),
-            _template_parameter(template_parameter->clone()) {
+            parameter(), _template_parameter(template_parameter->clone()) {
             _parameters.push_back(std::move(template_parameter));
         }
         template <typename Parameter, typename... Rest>
@@ -1865,9 +1917,7 @@ namespace sepia {
         array_parameter(
             std::vector<std::unique_ptr<parameter>> parameters,
             std::unique_ptr<parameter> template_parameter) :
-            parameter(),
-            _parameters(std::move(parameters)),
-            _template_parameter(std::move(template_parameter)) {}
+            parameter(), _parameters(std::move(parameters)), _template_parameter(std::move(template_parameter)) {}
         array_parameter(const array_parameter&) = delete;
         array_parameter(array_parameter&&) = default;
         array_parameter& operator=(const array_parameter&) = delete;
@@ -2029,11 +2079,7 @@ namespace sepia {
     class number_parameter : public parameter {
         public:
         number_parameter(double value, double minimum, double maximum, bool is_integer) :
-            parameter(),
-            _value(value),
-            _minimum(minimum),
-            _maximum(maximum),
-            _is_integer(is_integer) {
+            parameter(), _value(value), _minimum(minimum), _maximum(maximum), _is_integer(is_integer) {
             validate();
         }
         number_parameter(const number_parameter&) = delete;
@@ -2150,8 +2196,7 @@ namespace sepia {
     class enum_parameter : public string_parameter {
         public:
         enum_parameter(const std::string& value, const std::unordered_set<std::string>& available_values) :
-            string_parameter(value),
-            _available_values(available_values) {
+            string_parameter(value), _available_values(available_values) {
             if (_available_values.size() == 0) {
                 throw parameter_error("an enum parameter needs at least one available value");
             }
